@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tens – Card Game</title>
+<style>
+  /* Themed board: deep green felt + gold accents */
+  :root{
+    --felt:#0a5a3c;
+    --felt-dark:#084a33;
+    --gold:#f0c36a;
+    --ivory:#f9f6ee;
+    --ink:#1b1b1b;
+    --accent:#e7b553;
+  }
+  html,body{height:100%;}
+  body{
+    margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    background: radial-gradient(1000px 600px at 50% 20%, var(--felt), var(--felt-dark));
+    color: var(--ivory);
+    overflow-x:hidden;
+  }
+  .table{max-width: 1200px; margin: 0 auto; padding: 16px 16px 160px; position: relative;}
+  h1{font-weight:800; letter-spacing:1px; margin:8px 0 0;}
+  .sub{opacity:.85; margin:0 0 16px 0}
+  .controls{display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:8px 0 16px 0;}
+  select, button{background: #113f2d; color: var(--ivory); border: 1px solid #205f45; border-radius: 10px; padding:10px 12px; font-size:14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);}
+  button.primary{background:linear-gradient(180deg,#facb76,#e7b553); color:#2d1c00; border-color:#e6b14c; font-weight:700}
+  button:disabled{opacity:.5; cursor:not-allowed}
+  .board{display:grid; grid-template-columns: 1fr 460px 1fr; gap:16px; align-items:start;}
+  .panel{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:12px}
+  .pile{background: rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:14px; min-height:140px; backdrop-filter: blur(4px);}
+  .pile h3,.section h3{margin:0 0 8px 0; font-size:14px; opacity:.9}
+  .stack{display:flex; flex-wrap:wrap; gap:6px}
+  .card{width:48px; height:68px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:18px; position:relative; background:linear-gradient(180deg,#fff,#efefef); color:#111; border:1px solid #d8d8d8; box-shadow: 0 1px 0 rgba(0,0,0,.3); transition: transform .15s ease, box-shadow .15s ease, opacity .2s ease; user-select:none;}
+  .card.red{color:#b02020}
+  .card.faceDown{background: repeating-linear-gradient(45deg, #245a45, #245a45 8px, #1c4a39 8px, #1c4a39 16px); color:transparent; border-color:#2d6a52}
+  .card.small{width:36px; height:52px; font-size:14px; border-radius:8px}
+  .card.playable{outline:3px solid var(--accent); cursor:pointer; box-shadow: 0 6px 20px rgba(0,0,0,.35)}
+  .card.playable:hover{transform:translateY(-2px)}
+  .lane{display:flex; flex-direction:column; gap:8px}
+  .playerArea{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:12px}
+  .playerHeader{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px}
+  .badge{background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); padding:4px 8px; border-radius:999px; font-size:12px}
+  .me .playerHeader{color: var(--accent)}
+  .turnGlow{box-shadow: 0 0 0 3px rgba(240,195,106,.4), 0 0 0 8px rgba(240,195,106,.18)}
+  .log{max-height:160px; overflow:auto; font-size:13px; background: rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:10px}
+  .scorebar{position:fixed; left:0; right:0; bottom:0; background: rgba(10,90,60,.92); border-top:1px solid rgba(255,255,255,.15); display:flex; gap:12px; padding:10px 16px; align-items:center; backdrop-filter: blur(6px);}
+  .scores{display:flex; gap:10px; flex-wrap:wrap; font-size:13px}
+  .scores .slot{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.2); padding:6px 10px; border-radius:10px}
+  .toast{position:fixed; top:16px; right:16px; background: #1a1a1a; color:#fff; padding:10px 12px; border-radius:10px; opacity:0; transform: translateY(-6px); transition: all .25s ease}
+  .toast.show{opacity:1; transform: translateY(0)}
+  .picker{position:fixed; left:50%; transform:translateX(-50%); bottom:68px; background:#103a2a; border:1px solid #1d5e45; border-radius:14px; padding:10px 12px; display:none; gap:8px; align-items:center; box-shadow: 0 8px 30px rgba(0,0,0,.35);}
+  .picker b{margin-right:8px}
+  .picker button{background:#184b37}
+  .picker .row{display:flex; gap:8px; align-items:center}
+</style>
+</head>
+<body>
+  <div class="table">
+    <h1>Tens</h1>
+    <p class="sub">Goal: shed all cards in hand and on the table (face-up then face-down). Clearing happens on any <b>10</b> or when the current value count reaches <b>4+</b>. Higher-than-last forces a pickup first. After a clear, <b>the same player continues</b>.</p>
+
+    <div class="controls">
+      <label>Players
+        <select id="playerCount">
+          <option value="2">2 (you + 1 AI)</option>
+          <option value="3" selected>3 (you + 2 AI)</option>
+          <option value="4">4 (you + 3 AI)</option>
+          <option value="5">5 (you + 4 AI)</option>
+          <option value="6">6 (you + 5 AI)</option>
+        </select>
+      </label>
+      <button id="newRound" class="primary">Start New Round</button>
+      <button id="newGame">Reset Match</button>
+      <button id="runTests">Run Rule Tests</button>
+      <span class="hint">Match ends when someone hits 150+ points.</span>
+    </div>
+
+    <div class="board">
+      <div class="lane">
+        <div class="playerArea panel" id="aiTop"></div>
+      </div>
+      <div>
+        <div class="pile" id="centerPile">
+          <h3>Center Pile</h3>
+          <div id="pileInfo" class="hint">—</div>
+          <div class="stack" id="pileStack"></div>
+        </div>
+        <div class="panel" id="logWrap" style="margin-top:10px">
+          <h3>Log</h3>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="playerArea panel me" id="human"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scorebar">
+    <div><b>Scores</b></div>
+    <div class="scores" id="scores"></div>
+    <div style="margin-left:auto" id="status"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="picker" id="picker"></div>
+
+<script>
+// ======= Utility =======
+const SUITS = ["♠","♥","♦","♣"]; // cosmetic
+const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"]; // 1..13
+const RVAL = Object.fromEntries(RANKS.map((r,i)=>[r, i+1]));
+const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+function scoringValue(rank){ if(rank==="10") return 30; if(["J","Q","K"].includes(rank)) return 10; if(rank==="A") return 1; return Number(rank); }
+function decksForPlayers(p){ if(p===2) return 1; if(p<=5) return 2; if(p<=8) return 3; if(p<=10) return 4; if(p<=13) return 5; return 6; }
+function makeDeck(n){ const d=[]; for(let k=0;k<n;k++){ for(const s of SUITS){ for(const r of RANKS){ d.push({r,s}); } } } return shuffle(d); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a; }
+
+// ======= Game State =======
+const state = { players:[], pile:[], currentValue:null, currentCount:0, turn:0, roundActive:false, dealer:-1, matchActive:true, mustDeclare:new Set() };
+
+function freshPlayers(n){ state.players = Array.from({length:n}, (_,i)=>({ id:i, name: i===0?"You":`AI ${i}`, isHuman:i===0, hand:[], slots:[], score:0 })); }
+function nextDealer(){ state.dealer = (state.dealer+1) % state.players.length; }
+function resetMatch(){ state.players.forEach(p=>p.score=0); state.dealer=-1; state.matchActive=true; logClear(); updateScores(); }
+
+// ======= Setup Round (4 face-up on 4 face-down) =======
+function dealRound(){
+  const d = makeDeck(decksForPlayers(state.players.length));
+  for(const p of state.players){ p.hand=[]; p.slots=[]; }
+  for(const p of state.players){ for(let i=0;i<4;i++){ const down=d.pop(); const up=d.pop(); p.slots.push({down, up}); } }
+  for(const p of state.players){ for(let i=0;i<11;i++){ p.hand.push(d.pop()); } }
+  state.pile=[]; state.currentValue=null; state.currentCount=0; state.roundActive=true; state.mustDeclare.clear(); state.turn=(state.dealer+1)%state.players.length;
+}
+
+// Helpers to read/modify slots
+function faceUpCards(p){ const arr=[]; p.slots.forEach((s,idx)=>{ if(s.up) arr.push({...s.up, _slot:idx}); }); return arr; }
+function faceDownCount(p){ return p.slots.filter(s=>!!s.down).length; }
+function removeFaceUpOfRank(p, rank, count){ let removed=[]; for(const s of p.slots){ if(count&&s.up && s.up.r===rank){ removed.push(s.up); s.up=null; count--; if(count===0) break; } } return removed; }
+function countFaceUpRank(p, rank){ let n=0; for(const s of p.slots){ if(s.up && s.up.r===rank) n++; } return n; }
+function countHandRank(p, rank){ return p.hand.filter(c=>c.r===rank).length; }
+
+// ======= Rendering =======
+function makeCardEl(card, small=false, hidden=false){ const d=document.createElement('div'); d.className='card'+(small?' small':'')+(hidden?' faceDown':''); if(!hidden){ d.textContent=card.r; if(card.s==='♥'||card.s==='♦') d.classList.add('red'); } return d; }
+
+function render(){
+  const aiWrap=document.getElementById('aiTop'); const meWrap=document.getElementById('human'); aiWrap.innerHTML=''; meWrap.innerHTML='';
+  state.players.forEach((p,idx)=>{
+    const area=document.createElement('div'); area.className='playerArea'+(p.isHuman?' me':''); if(idx===state.turn && state.roundActive) area.classList.add('turnGlow');
+    const hdr=document.createElement('div'); hdr.className='playerHeader';
+    const left=document.createElement('div'); left.innerHTML=`<b>${p.name}</b> <span class="badge">hand: ${p.hand.length}</span>`;
+    const right=document.createElement('div'); right.innerHTML=`<span class="badge">table: ${faceUpCards(p).length + faceDownCount(p)}</span>`; hdr.append(left,right); area.append(hdr);
+
+    // Slots: 4 columns, show up over down; down clickable only if up is gone and it's human's turn
+    const slotRow=document.createElement('div'); slotRow.style.display='grid'; slotRow.style.gridTemplateColumns='repeat(4, 56px)'; slotRow.style.gap='8px';
+    p.slots.forEach((s,slotIdx)=>{
+      const col=document.createElement('div'); col.style.display='grid'; col.style.gridTemplateRows='1fr 1fr'; col.style.gap='4px';
+      // Face-up visible for ALL players
+      if(s.up){
+        const upEl=makeCardEl(s.up, !p.isHuman, false);
+        if(p.isHuman && state.turn===p.id && state.roundActive){
+          const qtyFU = countFaceUpRank(p, s.up.r);
+          upEl.classList.add('playable');
+          upEl.onclick=()=> promptCountAndPlay(s.up.r, 'faceUp', qtyFU);
+        }
+        col.append(upEl);
+      } else {
+        const empty=document.createElement('div'); empty.style.height='68px'; col.append(empty);
+      }
+      // Face-down back
+      if(s.down){
+        const downEl=makeCardEl({r:'',s:'♠'}, !p.isHuman, true);
+        if(p.isHuman && state.turn===p.id && state.roundActive && !s.up){
+          downEl.classList.add('playable');
+          downEl.title='Flip this face-down card';
+          downEl.onclick=()=> tryFlipFaceDownSlot(slotIdx);
+        }
+        col.append(downEl);
+      } else {
+        const gone=document.createElement('div'); gone.style.height='68px'; col.append(gone);
+      }
+      slotRow.append(col);
+    });
+    const fuSec=document.createElement('div'); fuSec.className='section'; fuSec.innerHTML='<h3>Table (4 up over 4 down)</h3>'; area.append(fuSec); area.append(slotRow);
+
+    // Human hand with grouping and selection
+    if(p.isHuman){
+      const handSec=document.createElement('div'); handSec.className='section'; handSec.innerHTML='<h3>Your Hand</h3>';
+      const handRow=document.createElement('div'); handRow.className='stack';
+      const groups=groupByRank(p.hand);
+      Object.keys(groups).sort((a,b)=>RVAL[a]-RVAL[b]).forEach(r=>{
+        const qty=groups[r].length; const wrap=document.createElement('div'); wrap.style.display='flex'; wrap.style.gap='4px';
+        groups[r].forEach(()=>{ const el=makeCardEl({r,s:'♠'}, false, false); if(canPlayRank(r)) el.classList.add('playable'); el.onclick=()=> promptCountAndPlay(r,'hand', qty); wrap.append(el); });
+        handRow.append(wrap);
+      });
+      area.append(handSec); area.append(handRow);
+    }
+
+    (p.isHuman?meWrap:aiWrap).append(area);
+  });
+
+  // pile
+  const pileStack=document.getElementById('pileStack'); pileStack.innerHTML=''; state.pile.forEach((c,i)=>{ const el=makeCardEl(c,true,false); el.style.opacity = (i < state.pile.length - 10) ? 0.25 : 1; pileStack.append(el); });
+  document.getElementById('pileInfo').textContent = state.currentValue? `${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start';
+  updateScores();
+}
+
+function groupByRank(cards){ const m={}; for(const c of cards){ (m[c.r]??=[]).push(c);} return m; }
+function canPlayRank(rank){ if(rank==="10") return true; if(state.currentValue===null) return true; return RVAL[rank] <= state.currentValue; }
+
+// ======= Play Logic =======
+async function playCards(player, rank, source, count, includeFU=false, includeHand=false){
+  const isTen = rank === "10"; const rv = RVAL[rank];
+  // If higher-than-last (not 10): pickup ENTIRE pile AND the attempted card(s), then same player chooses anew
+  if(!isTen && state.currentValue!==null && rv>state.currentValue){
+    // Move all pile cards to hand
+    if(state.pile.length){ player.hand.push(...state.pile); state.pile.length=0; }
+    // Also move the attempted play into hand (not onto the pile)
+    if(source==='faceUp'){
+      const moved = removeFaceUpOfRank(player, rank, count);
+      if(moved.length) player.hand.push(...moved);
+    }
+    // If source was hand, the cards are already in hand; do nothing
+    // Reset pile state
+    state.currentValue=null; state.currentCount=0;
+    log(`${player.name} plays higher and must pick up the pile (including their card).`);
+    render();
+    await sleep(200);
+    // Same player immediately chooses a new play
+    return player.isHuman ? enableHumanChoices() : aiTakeTurn(player,true);
+  }
+
+  // select cards to actually play
+  let played=[];
+  if(source==='hand'){
+    let moved=0; const rest=[]; for(const c of player.hand){ if(moved<count && c.r===rank){ played.push(c); moved++; } else { rest.push(c); } } player.hand=rest;
+    if(includeFU && moved<count){ // pull remaining from face-up
+      const need = count - moved;
+      const extra = removeFaceUpOfRank(player, rank, need);
+      played.push(...extra);
+    }
+  } else if(source==='faceUp'){
+    let removed = removeFaceUpOfRank(player, rank, count);
+    played.push(...removed);
+    if(includeHand && removed.length<count){ // pull remaining from hand
+      const need = count - removed.length;
+      let moved=0; const rest=[]; for(const c of player.hand){ if(moved<need && c.r===rank){ played.push(c); moved++; } else { rest.push(c); } } player.hand=rest;
+    }
+  } else if(source==='faceDownReveal'){ /* handled elsewhere */ }
+
+  state.pile.push(...played);
+
+  if(isTen){
+    await clearPile(player, `10 by ${player.name}`);
+    if(hasCards(player)){
+      await sleep(180);
+      return player.isHuman ? enableHumanChoices() : aiTakeTurn(player,true);
+    }
+  } else {
+    if(state.currentValue===rv) state.currentCount += played.length; else { state.currentValue=rv; state.currentCount=played.length; }
+    if(state.currentCount>=4){
+      await clearPile(player, `${rank} reached ${state.currentCount}`);
+      if(hasCards(player)){
+        await sleep(180);
+        return player.isHuman ? enableHumanChoices() : aiTakeTurn(player,true);
+      }
+    }
+  }
+
+  maybeDeclare(player);
+  endOrNext();
+}
+
+function maybeDeclare(p){ const remaining = p.hand.length + faceUpCards(p).length + faceDownCount(p); if(remaining===1 && !state.mustDeclare.has(p.id)){ state.mustDeclare.add(p.id); toast(`${p.name}: \"One card!\"`); log(`${p.name} declares: one card`); } }
+function hasCards(p){ return p.hand.length + faceUpCards(p).length + faceDownCount(p) > 0; }
+
+// ======= Human interactions =======
+function promptCountAndPlay(rank, source, max){
+  if(!state.roundActive) return;
+  const current = state.players[state.turn];
+  if(!current.isHuman) return;
+  if(source==='faceUp' && countFaceUpRank(current, rank)===0) return;
+
+  const fuQty = countFaceUpRank(current, rank);
+  const hQty  = countHandRank(current, rank);
+
+  // If only one copy in the chosen source, normally auto-play…
+  // …but if there are matching cards in the *other* source, we must show the picker so the user can include them.
+  if(max===1){
+    if((source==='hand'   && fuQty>0) ||
+       (source==='faceUp' && hQty>0)){
+      return showPicker(rank, source, max); // let them choose include toggle
+    }
+    // No extras available in the other source → auto-play single
+    playCards(current, rank, source, 1, /*includeFU*/false, /*includeHand*/false);
+    return;
+  }
+  showPicker(rank, source, max);
+}
+
+function showPicker(rank, source, max){
+  const pk=document.getElementById('picker');
+  pk.innerHTML='';
+  const p = state.players[state.turn];
+
+  const row1 = document.createElement('div'); row1.className='row';
+  const label=document.createElement('b'); label.textContent=`Play ${rank} — choose count:`; row1.append(label); pk.append(row1);
+
+  let includeFU=false, includeHand=false; // toggles
+  let countCap=max;
+  let capNote=null;
+
+  // Directional include options
+  if(source==='hand'){
+    const fuQty = countFaceUpRank(p, rank);
+    if(fuQty>0){
+      const row=document.createElement('div'); row.className='row';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.id='incfu';
+      const lb=document.createElement('label'); lb.setAttribute('for','incfu'); lb.textContent=`Include face-up (${fuQty} available)`;
+      cb.onchange=()=>{ includeFU=cb.checked; updateCap(); buildButtons(); };
+      row.append(cb, lb); pk.append(row);
+      capNote=document.createElement('span'); capNote.style.opacity='.8'; capNote.style.margin='0 8px'; pk.append(capNote);
+      function updateCap(){ countCap = includeFU ? (max + fuQty) : max; capNote.textContent=`Max: ${countCap}`; }
+      function buildButtons(){ buttons.innerHTML=''; for(let i=1;i<=countCap;i++){ const b=document.createElement('button'); b.textContent=String(i); b.onclick=()=>{ pk.style.display='none'; playCards(state.players[state.turn], rank, source, i, includeFU, false); }; buttons.append(b);} }
+      const buttons=document.createElement('div'); buttons.className='row'; pk.append(buttons); updateCap(); buildButtons();
+      const cancel=document.createElement('button'); cancel.textContent='Cancel'; cancel.onclick=()=> pk.style.display='none'; pk.append(cancel);
+      pk.style.display='flex';
+      return;
+    }
+  }
+
+  if(source==='faceUp'){
+    const hQty = countHandRank(p, rank);
+    if(hQty>0){
+      const row=document.createElement('div'); row.className='row';
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.id='inchand';
+      const lb=document.createElement('label'); lb.setAttribute('for','inchand'); lb.textContent=`Include hand (${hQty} available)`;
+      cb.onchange=()=>{ includeHand=cb.checked; updateCap(); buildButtons(); };
+      row.append(cb, lb); pk.append(row);
+      capNote=document.createElement('span'); capNote.style.opacity='.8'; capNote.style.margin='0 8px'; pk.append(capNote);
+      function updateCap(){ countCap = includeHand ? (max + hQty) : max; capNote.textContent=`Max: ${countCap}`; }
+      function buildButtons(){ buttons.innerHTML=''; for(let i=1;i<=countCap;i++){ const b=document.createElement('button'); b.textContent=String(i); b.onclick=()=>{ pk.style.display='none'; playCards(state.players[state.turn], rank, source, i, false, includeHand); }; buttons.append(b);} }
+      const buttons=document.createElement('div'); buttons.className='row'; pk.append(buttons); updateCap(); buildButtons();
+      const cancel=document.createElement('button'); cancel.textContent='Cancel'; cancel.onclick=()=> pk.style.display='none'; pk.append(cancel);
+      pk.style.display='flex';
+      return;
+    }
+  }
+
+  // Default buttons when no include option applies
+  const buttons=document.createElement('div'); buttons.className='row'; pk.append(buttons);
+  for(let i=1;i<=max;i++){ const b=document.createElement('button'); b.textContent=String(i); b.onclick=()=>{ pk.style.display='none'; playCards(state.players[state.turn], rank, source, i, false, false); }; buttons.append(b); }
+  const cancel=document.createElement('button'); cancel.textContent='Cancel'; cancel.onclick=()=> pk.style.display='none'; pk.append(cancel);
+  pk.style.display='flex';
+}
+
+// ======= Face-down flip =======
+async function tryFlipFaceDownSlot(slotIdx){
+  const p=state.players[state.turn];
+  const s=p.slots[slotIdx];
+  if(!s || s.up || !s.down) return;
+  const c=s.down; s.down=null; // revealed
+  // Blind play resolution
+  const rv=RVAL[c.r];
+  // If higher-than-last (and not a 10): pickup all + put revealed into hand, then choose anew
+  if(state.currentValue!==null && rv>state.currentValue && c.r!=="10"){
+    if(state.pile.length){ p.hand.push(...state.pile); state.pile.length=0; }
+    p.hand.push(c);
+    state.currentValue=null; state.currentCount=0;
+    log(`${p.name} flips ${c.r} (higher) and must pick up the pile including it.`);
+    render(); await sleep(200);
+    return p.isHuman ? enableHumanChoices() : aiTakeTurn(p,true);
+  }
+  // Otherwise, play it to the pile normally
+  state.pile.push(c);
+  if(c.r==="10"){ await clearPile(p, `10 (blind) by ${p.name}`); if(hasCards(p)) return enableHumanChoices(); }
+  else{
+    if(state.currentValue===null){ state.currentValue=rv; state.currentCount=1; }
+    else if(rv===state.currentValue){ state.currentCount+=1; }
+    else { state.currentValue=rv; state.currentCount=1; }
+    // add extras from hand or remaining face-up that match
+    let addH=[]; let rest=[]; for(const x of p.hand){ if(x.r===c.r) addH.push(x); else rest.push(x); } p.hand=rest; const canFU = removeFaceUpOfRank(p, c.r, 99); const add=[...addH, ...canFU]; if(add.length){ state.pile.push(...add); state.currentCount += add.length; if(state.currentCount>=4){ await clearPile(p, `${c.r} reached ${state.currentCount}`); if(hasCards(p)) return enableHumanChoices(); } }
+  }
+  maybeDeclare(p); endOrNext();
+}
+
+// ======= Clear / Turn =======
+async function clearPile(byPlayer, reason){ if(state.pile.length){ log(`${byPlayer.name} clears the pile (${reason}).`); state.pile.length=0; } state.currentValue=null; state.currentCount=0; render(); await sleep(200); }
+
+function endOrNext(){ render(); const finisher=state.players.find(p=>!hasCards(p)); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
+
+// ======= AI =======
+function allRanksAvailable(p){ const set=new Set(); p.hand.forEach(c=>set.add(c.r)); faceUpCards(p).forEach(c=>set.add(c.r)); return [...set]; }
+function countOnPileOf(rank){ if(state.currentValue===null) return 0; return (RANKS[state.currentValue-1]===rank)? state.currentCount : 0; }
+async function aiTakeTurn(p, chain=false){ if(!state.roundActive) return; await sleep(chain?220:500);
+  const fu=faceUpCards(p); const tenIn = p.hand.some(c=>c.r==='10') || fu.some(c=>c.r==='10'); if(tenIn && (state.pile.length>6 || Math.random()<0.6)){ if(p.hand.some(c=>c.r==='10')) return playCards(p,'10','hand', p.hand.filter(c=>c.r==='10').length); else return playCards(p,'10','faceUp', fu.filter(c=>c.r==='10').length); }
+  const ranks=allRanksAvailable(p); const legal=ranks.filter(r=>canPlayRank(r));
+  const qty=(r)=> p.hand.filter(c=>c.r===r).length + fu.filter(c=>c.r===r).length;
+  const clears=legal.map(r=>({r,qty:qty(r),streak:countOnPileOf(r)})).filter(x=> (state.currentValue===null? x.qty>=4 : (RANKS[state.currentValue-1]===x.r && x.qty+x.streak>=4))).sort((a,b)=> (b.qty+b.streak)-(a.qty+a.streak));
+  if(clears.length){ const r=clears[0].r; if(fu.some(c=>c.r===r)) return playCards(p,r,'faceUp', fu.filter(c=>c.r===r).length); return playCards(p,r,'hand', p.hand.filter(c=>c.r===r).length); }
+  legal.sort((a,b)=>RVAL[b]-RVAL[a]); for(const r of legal){ const fromFU = fu.filter(c=>c.r===r).length; if(fromFU) return playCards(p,r,'faceUp', fromFU); const fromH = p.hand.filter(c=>c.r===r).length; if(fromH) return playCards(p,r,'hand', fromH); }
+  if(fu.length===0 && p.slots.some(s=>s.down)){
+    const i = p.slots.findIndex(s=>!s.up && s.down); if(i>=0){
+      const s=p.slots[i]; const c=s.down; s.down=null; state.pile.push(c); const rv=RVAL[c.r]; if(c.r==='10'){ await clearPile(p,`10 (blind) by ${p.name}`); if(hasCards(p)) return aiTakeTurn(p,true); else return endOrNext(); }
+      if(state.currentValue===null){ state.currentValue=rv; state.currentCount=1; } else if(rv>state.currentValue){ p.hand.push(...state.pile); state.pile.length=0; state.currentValue=null; state.currentCount=0; log(`${p.name} picks up the pile (blind).`); await sleep(250); state.pile.push(c); state.currentValue=rv; state.currentCount=1; } else if(rv===state.currentValue){ state.currentCount+=1; } else { state.currentValue=rv; state.currentCount=1; }
+      const addH = p.hand.filter(x=>x.r===c.r); p.hand = p.hand.filter(x=>x.r!==c.r); const addFU = removeFaceUpOfRank(p, c.r, 99); const add=[...addH, ...addFU]; if(add.length){ state.pile.push(...add); state.currentCount += add.length; if(state.currentCount>=4){ await clearPile(p, `${c.r} reached ${state.currentCount}`); if(hasCards(p)) return aiTakeTurn(p,true); }
+      }
+      maybeDeclare(p); return endOrNext();
+    }
+  }
+  endOrNext();
+}
+
+// ======= Scoring / Rounds =======
+function scoreRound(finisher){
+  state.roundActive=false;
+  const pts=state.players.map(p=>{ let s=0; p.hand.forEach(c=>s+=scoringValue(c.r)); faceUpCards(p).forEach(c=>s+=scoringValue(c.r)); p.slots.forEach(sl=>{ if(sl.down) s+=scoringValue(sl.down.r); }); return s; });
+  pts.forEach((s,i)=> state.players[i].score+=s);
+  log(`Round ended. ${finisher.name} went out. Scoring applied.`);
+  updateScores();
+  const over=state.players.find(p=>p.score>=150);
+  if(over){
+    state.matchActive=false;
+    const winner=[...state.players].sort((a,b)=>a.score-b.score)[0];
+    toast(`Match Over! Winner: ${winner.name} (${winner.score})`);
+    document.getElementById('status').textContent=`Match Over — Winner: ${winner.name}`;
+    render();
+    return;
+  }
+  // Auto-start next round, keep scores, rotate dealer
+  nextDealer();
+  dealRound();
+  document.getElementById('status').textContent=`New round. ${state.players[state.turn].name} to play.`;
+  log(`New round begins. Dealer: ${state.players[state.dealer].name}. ${state.players[state.turn].name} starts.`);
+  render();
+  if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]);
+}
+function updateScores(){ const wrap=document.getElementById('scores'); wrap.innerHTML=''; state.players.forEach(p=>{ const d=document.createElement('div'); d.className='slot'; d.textContent=`${p.name}: ${p.score}`; wrap.append(d); }); }
+
+// ======= Logging / UI =======
+function log(msg){ const el=document.getElementById('log'); const p=document.createElement('div'); p.textContent=msg; el.append(p); el.scrollTop=el.scrollHeight; }
+function logClear(){ document.getElementById('log').innerHTML=''; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1600); }
+function enableHumanChoices(){ render(); }
+
+// ======= Controls & Tests =======
+function startNewRound(){ if(!state.matchActive){ resetMatch(); } nextDealer(); dealRound(); document.getElementById('status').textContent=`Round in progress. ${state.players[state.turn].name} to play.`; log(`New round. Dealer: ${state.players[state.dealer].name}. ${state.players[state.turn].name} starts.`); render(); if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]); }
+function resetAll(){ const n=parseInt(document.getElementById('playerCount').value,10); freshPlayers(n); state.dealer=-1; state.matchActive=true; logClear(); render(); }
+
+function assert(cond,msg){ if(!cond) throw new Error(msg||'Assertion failed'); }
+function clone(r){ return {r,s:'♠'}; }
+async function runTests(){
+  logClear(); log('Running rule tests…');
+  const sel=parseInt(document.getElementById('playerCount').value,10);
+  // 1) Ten clears
+  freshPlayers(2); state.dealer=0; dealRound(); state.pile=[clone('7'),clone('7')]; state.currentValue=RVAL['7']; state.currentCount=2; state.players[0].hand=[clone('10')]; state.players[0].slots=[]; state.roundActive=true; state.turn=0; await playCards(state.players[0],'10','hand',1); assert(state.pile.length===0,'Ten clears'); assert(state.currentValue===null,'Reset current');
+  // 2) Higher-than-last forces pickup BEFORE playing (card returns to hand)
+  freshPlayers(2); state.dealer=0; dealRound(); state.pile=[clone('4'),clone('4'),clone('4')]; state.currentValue=RVAL['4']; state.currentCount=3; const pUp=state.players[0]; pUp.hand=[clone('9')]; pUp.slots=[]; state.roundActive=true; state.turn=0; await playCards(pUp,'9','hand',1); assert(pUp.hand.filter(c=>c.r==='9').length===1,'Over card stayed/returned to hand'); assert(state.pile.length===0,'Pile moved to hand'); assert(state.currentValue===null,'Current reset'); assert(state.turn===0,'Same player continues');
+  // 3) Over from face-up moves that card into hand as well
+  freshPlayers(2); state.dealer=0; dealRound(); const pFU=state.players[0]; pFU.slots=[{up:clone('9'),down:null},{up:null,down:null},{up:null,down:null},{up:null,down:null}]; state.pile=[clone('7')]; state.currentValue=RVAL['7']; state.currentCount=1; state.roundActive=true; state.turn=0; await playCards(pFU,'9','faceUp',1); assert(countFaceUpRank(pFU,'9')===0,'Face-up 9 removed'); assert(pFU.hand.filter(c=>c.r==='9').length===1,'Over card moved to hand'); assert(state.pile.length===0,'Pile cleared to hand'); assert(state.currentValue===null,'Current reset');
+  // 4) Four-of-a-kind clears
+  freshPlayers(2); state.dealer=0; dealRound(); state.pile=[clone('6'),clone('6')]; state.currentValue=RVAL['6']; state.currentCount=2; state.players[0].hand=[clone('6'),clone('6')]; state.players[0].slots=[]; state.turn=0; state.roundActive=true; await playCards(state.players[0],'6','hand',2); assert(state.pile.length===0,'Four clears');
+  // 5) Face-up visibility & helper counts
+  freshPlayers(2); state.dealer=0; dealRound(); const p=state.players[0]; assert(p.slots.filter(s=>!!s.up).length===4,'Exactly 4 face-up at start'); const r1=p.slots[0].up.r; const upCountDirect=p.slots.map(s=>s.up?s.up.r:null).filter(r=>r===r1).length; assert(countFaceUpRank(p,r1)===upCountDirect,'countFaceUpRank matches direct count'); removeFaceUpOfRank(p,r1,1); assert(!p.slots[0].up,'Removing a face-up exposes its down for flip');
+  // 6) No picker for single copy from hand when no face-up matches
+  freshPlayers(2); state.dealer=0; dealRound(); const me=state.players[0]; me.hand=[clone('8')]; me.slots=[{up:clone('A'),down:null},{up:clone('K'),down:null},{up:clone('2'),down:null},{up:clone('3'),down:null}]; state.pile=[]; state.currentValue=null; state.currentCount=0; state.roundActive=true; state.turn=0; const before8=me.hand.length; promptCountAndPlay('8','hand',1); assert(me.hand.length===before8-1,'Single from hand auto-played with no face-up matches');
+  // 7) Picker appears when single from hand but face-up matches exist
+  freshPlayers(2); state.dealer=0; dealRound(); const me2=state.players[0]; me2.hand=[clone('9')]; me2.slots=[{up:clone('9'),down:null},{up:clone('A'),down:null},{up:clone('K'),down:null},{up:clone('Q'),down:null}]; state.pile=[]; state.currentValue=null; state.currentCount=0; state.roundActive=true; state.turn=0; const pk=document.getElementById('picker'); promptCountAndPlay('9','hand',1); assert(pk.style.display==='flex','Picker shown to allow including face-up when hand has one'); pk.style.display='none';
+  // 8) Include hand when playing from face-up (even if only one face-up)
+  freshPlayers(2); state.dealer=0; dealRound(); const me3=state.players[0]; me3.hand=[clone('Q')]; me3.slots=[{up:clone('Q'),down:null},{up:clone('2'),down:null},{up:clone('3'),down:null},{up:clone('4'),down:null}]; state.pile=[]; state.currentValue=null; state.currentCount=0; state.roundActive=true; state.turn=0; const pk2=document.getElementById('picker'); promptCountAndPlay('Q','faceUp',1); assert(pk2.style.display==='flex','Picker shown to allow including hand when only one face-up'); pk2.style.display='none';
+  // 9) After clear (10) same player continues
+  freshPlayers(2); state.dealer=0; dealRound(); state.pile=[clone('5')]; state.currentValue=RVAL['5']; state.currentCount=1; const me4=state.players[0]; me4.hand=[clone('10'),clone('2')]; me4.slots=[]; state.roundActive=true; state.turn=0; await playCards(me4,'10','hand',1); assert(state.turn===0,'After 10 clear, same player continues');
+  // 10) Round auto-advance when no one at 150
+  freshPlayers(2); state.dealer=0; dealRound(); state.players[0].hand=[]; state.players[0].slots=[]; state.players[1].hand=[clone('A')]; state.players[1].slots=[]; state.players[0].score=20; state.players[1].score=40; scoreRound(state.players[0]); assert(state.roundActive===true,'Next round auto-started'); assert(state.matchActive===true,'Match continues');
+  // 11) Blind flip higher-than-last: revealed goes to hand, turn stays
+  freshPlayers(2); state.dealer=0; dealRound(); const me6=state.players[0]; state.pile=[clone('5')]; state.currentValue=RVAL['5']; state.currentCount=1; me6.slots=[{up:null,down:clone('9')},{up:null,down:null},{up:null,down:null},{up:null,down:null}]; me6.hand=[]; state.roundActive=true; state.turn=0; await tryFlipFaceDownSlot(0); assert(me6.hand.some(c=>c.r==='9'),'Revealed higher card moved to hand'); assert(state.pile.length===0,'Pile moved to hand on over'); assert(state.turn===0,'Same player continues after pickup');
+  // 12) Match ends when >=150; no auto new round
+  freshPlayers(2); state.dealer=0; dealRound(); state.players[0].hand=[]; state.players[0].slots=[]; state.players[1].hand=[clone('A')]; state.players[1].slots=[]; state.players[0].score=149; state.players[1].score=40; scoreRound(state.players[0]); assert(state.matchActive===false,'Match ended at >=150');
+
+  document.getElementById('playerCount').value=String(sel); resetAll(); toast('All tests passed.'); log('All tests passed.');
+}
+
+// init
+resetAll();
+
+document.getElementById('playerCount').addEventListener('change', resetAll);
+document.getElementById('newRound').addEventListener('click', startNewRound);
+document.getElementById('newGame').addEventListener('click', ()=>{ resetMatch(); resetAll(); });
+document.getElementById('runTests').addEventListener('click', ()=>{ runTests(); });
+</script>
+</body>
+</html>
