@@ -87,6 +87,49 @@
   /* Touch affordances */
   *{ -webkit-tap-highlight-color: rgba(0,0,0,0); }
   button, .card.playable{ touch-action: manipulation; }
+  /* ===== Mobile responsiveness ===== */
+  @media (max-width: 900px){
+    .table{padding:12px 12px 200px}
+    .board{grid-template-columns: 1fr; gap:12px}
+    .controls{gap:8px}
+    select,button{font-size:16px; padding:12px 14px; border-radius:12px}
+    .panel,.pile{border-radius:14px}
+    .playerHeader .badge{font-size:12px}
+    .card{width:56px; height:80px; font-size:20px; border-radius:12px}
+    .card.small{width:44px; height:64px; font-size:16px}
+    /* Horizontal scroll for big hands */
+    .me .stack{flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; gap:8px; padding-bottom:6px}
+    .me .stack .card{flex:0 0 auto}
+    .scorebar{padding:10px 14px}
+    .picker{left:0; right:0; transform:none; margin:0 8px; bottom:84px; border-radius:16px; padding:12px}
+    .picker button{padding:10px 12px; font-size:16px; border-radius:10px}
+  }
+  @media (max-width: 600px){
+    h1{font-size:22px}
+    .sub{font-size:14px}
+    .controls{flex-direction:column; align-items:stretch}
+    .controls label{display:flex; justify-content:space-between; align-items:center}
+    .pile h3,.section h3{font-size:13px}
+    .playerHeader{flex-direction:column; align-items:flex-start; gap:4px}
+    .card{width:64px; height:92px; font-size:22px}
+    .card.small{width:48px; height:72px; font-size:18px}
+    .stack{gap:10px}
+    /* Slightly compress AI panel spacing */
+    #aiTop .playerArea{padding:8px}
+    .scorebar{gap:8px}
+    .scores{font-size:12px}
+    .picker{bottom:92px}
+  }
+  /* Touch affordances */
+  *{ -webkit-tap-highlight-color: rgba(0,0,0,0); }
+  button, .card.playable{ touch-action: manipulation; }
+
+  /* ===== Floating mini pile (mobile only) ===== */
+  #miniPile{ position: fixed; right: 10px; bottom: 116px; z-index: 50; display:none; width: 150px; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:8px; backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  #miniPile h4{ margin:0 0 4px 0; font-size:12px; opacity:.9 }
+  #miniInfo{ font-size:12px; opacity:.9; margin-bottom:6px }
+  #miniStack .card{ transform: scale(.9); }
+  @media (min-width: 901px){ #miniPile{ display:none !important; } }
 </style>
 </head>
 <body>
@@ -139,6 +182,13 @@
 
   <div class="toast" id="toast"></div>
   <div class="picker" id="picker"></div>
+
+  <!-- Floating mini pile for mobile -->
+  <div id="miniPile">
+    <h4>Pile</h4>
+    <div id="miniInfo">—</div>
+    <div class="stack" id="miniStack"></div>
+  </div>
 
 <script>
 // ======= Utility =======
@@ -237,6 +287,7 @@ function render(){
   const pileStack=document.getElementById('pileStack'); pileStack.innerHTML=''; state.pile.forEach((c,i)=>{ const el=makeCardEl(c,true,false); el.style.opacity = (i < state.pile.length - 10) ? 0.25 : 1; pileStack.append(el); });
   document.getElementById('pileInfo').textContent = state.currentValue? `${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start';
   updateScores();
+  renderMiniPile();
 }
 
 function groupByRank(cards){ const m={}; for(const c of cards){ (m[c.r]??=[]).push(c);} return m; }
@@ -472,6 +523,35 @@ function scoreRound(finisher){
 function updateScores(){ const wrap=document.getElementById('scores'); wrap.innerHTML=''; state.players.forEach(p=>{ const d=document.createElement('div'); d.className='slot'; d.textContent=`${p.name}: ${p.score}`; wrap.append(d); }); }
 
 // ======= Logging / UI =======
+function renderMiniPile(){
+  const mini = document.getElementById('miniPile');
+  const mInfo = document.getElementById('miniInfo');
+  const mStack = document.getElementById('miniStack');
+  // Update content
+  mStack.innerHTML='';
+  const showCount = Math.min(6, state.pile.length);
+  for(let i=Math.max(0, state.pile.length - showCount); i<state.pile.length; i++){
+    const el = makeCardEl(state.pile[i], true, false);
+    mStack.append(el);
+  }
+  mInfo.textContent = state.currentValue? `${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start';
+}
+
+let miniObserverInitialized=false;
+function initMiniObserver(){
+  if(miniObserverInitialized) return; miniObserverInitialized=true;
+  const target = document.getElementById('centerPile');
+  const mini = document.getElementById('miniPile');
+  if(!('IntersectionObserver' in window) || !target) return;
+  const io = new IntersectionObserver((entries)=>{
+    const e = entries[0];
+    // Only show on mobile widths
+    const mobile = window.innerWidth <= 900;
+    if(mobile && (!e.isIntersecting)) mini.style.display = 'block'; else mini.style.display = 'none';
+  }, {root:null, threshold:0.1});
+  io.observe(target);
+}
+
 function log(msg){ const el=document.getElementById('log'); const p=document.createElement('div'); p.textContent=msg; el.append(p); el.scrollTop=el.scrollHeight; }
 function logClear(){ document.getElementById('log').innerHTML=''; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1600); }
@@ -516,6 +596,7 @@ async function runTests(){
 
 // init
 resetAll();
+initMiniObserver();
 
 document.getElementById('playerCount').addEventListener('change', resetAll);
 document.getElementById('newRound').addEventListener('click', startNewRound);
