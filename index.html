@@ -55,6 +55,38 @@
   .picker b{margin-right:8px}
   .picker button{background:#184b37}
   .picker .row{display:flex; gap:8px; align-items:center}
+  /* ===== Mobile responsiveness ===== */
+  @media (max-width: 900px){
+    .table{padding:12px 12px 180px}
+    .board{grid-template-columns: 1fr; gap:12px}
+    .controls{gap:8px}
+    select,button{font-size:16px; padding:12px 14px; border-radius:12px}
+    .panel,.pile{border-radius:14px}
+    .playerHeader .badge{font-size:12px}
+    .card{width:56px; height:80px; font-size:20px; border-radius:12px}
+    .card.small{width:44px; height:64px; font-size:16px}
+    .stack{gap:8px}
+    .scorebar{padding:10px 14px}
+    .picker{left:0; right:0; transform:none; margin:0 8px; bottom:80px; border-radius:16px; padding:12px}
+    .picker button{padding:10px 12px; font-size:16px; border-radius:10px}
+  }
+  @media (max-width: 600px){
+    h1{font-size:22px}
+    .sub{font-size:14px}
+    .controls{flex-direction:column; align-items:stretch}
+    .controls label{display:flex; justify-content:space-between; align-items:center}
+    .pile h3,.section h3{font-size:13px}
+    .playerHeader{flex-direction:column; align-items:flex-start; gap:4px}
+    .card{width:64px; height:92px; font-size:22px}
+    .card.small{width:48px; height:72px; font-size:18px}
+    .stack{gap:10px}
+    .scorebar{gap:8px}
+    .scores{font-size:12px}
+    .picker{bottom:90px}
+  }
+  /* Touch affordances */
+  *{ -webkit-tap-highlight-color: rgba(0,0,0,0); }
+  button, .card.playable{ touch-action: manipulation; }
 </style>
 </head>
 <body>
