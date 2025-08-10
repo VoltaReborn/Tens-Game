@@ -23,7 +23,10 @@
   .stack{display:flex; flex-wrap:wrap; gap:6px}
   .card{width:48px; height:68px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:18px; position:relative; background:linear-gradient(180deg,#fff,#efefef); color:#111; border:1px solid #d8d8d8; box-shadow:0 1px 0 rgba(0,0,0,.3); transition: transform .15s ease, box-shadow .15s ease, opacity .2s ease; user-select:none}
   .card.red{color:#b02020}
-  .card.faceDown{background: repeating-linear-gradient(45deg, #245a45, #245a45 8px, #1c4a39 8px, #1c4a39 16px); color:transparent; border-color:#2d6a52}
+  .card.faceDown{background:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,.15) 0 7px, transparent 8px),
+    repeating-linear-gradient(45deg, #1f5aa5, #1f5aa5 8px, #184b8a 8px, #184b8a 16px);
+  color:transparent; border-color:#0e3a74; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12)}
   .card.small{width:36px; height:52px; font-size:14px; border-radius:8px}
   .card.playable{outline:3px solid var(--accent); cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.35)}
   .card.playable:hover{transform:translateY(-2px)}
@@ -130,7 +133,7 @@
   </div>
 
   <div class="scorebar collapsed" id="scorebar">
-    <button id="scoreToggle">Scores ▾</button>
+    <button id="scoreToggle" title="Toggle status">Status ▾</button>
     <div class="scores" id="scores"></div>
     <div style="margin-left:auto" id="status"></div>
   </div>
@@ -208,12 +211,9 @@ function faceDownCount(p){ return p.slots.filter(s=>!!(s&&s.down)).length; }
 function removeFaceUpOfRank(p,rank,count){ const removed=[]; for(const s of p.slots){ if(count && s && s.up && s.up.r===rank){ removed.push(s.up); s.up=null; count--; if(count===0) break; } } return removed; }
 function countFaceUpRank(p,rank){ let n=0; for(const s of p.slots){ if(s && s.up && s.up.r===rank) n++; } return n; }
 function countHandRank(p,rank){ return p.hand.filter(c=>c && c.r===rank).length; }
-function incPickup(p){ const cur=state.roundStats.pickups.get(p.id)||0; state.roundStats.pickups.set(p.id,cur+1); }
 
 // ===== Render =====
-function makeCardEl(card,small=false,hidden=false){ const d=document.createElement('div'); const rr=card?.r??''; const ss=settings.showSuits ? (card?.s??'♠') : '';
-  d.className='card'+(small?' small':'')+(hidden?' faceDown':''); if(!hidden){ d.textContent=rr+(ss?` ${ss}`:''); if(settings.showSuits && (ss==='♥'||ss==='♦')) d.classList.add('red'); }
-  return d; }
+function makeCardEl(card,small=false,hidden=false){ const d=document.createElement('div'); const rr=card?.r??''; const ss=card?.s??'♠'; d.className='card'+(small?' small':'')+(hidden?' faceDown':''); if(!hidden){ d.textContent=rr; if(ss==='♥'||ss==='♦') d.classList.add('red'); } return d; }
 function groupByRank(cards){ const m={}; for(const c of cards){ if(!c||!c.r) continue; (m[c.r]??=[]).push(c); } return m; }
 function canPlayRank(rank){ if(rank==='10') return true; if(state.currentValue===null) return true; return RVAL[rank] <= state.currentValue; }
 
@@ -221,11 +221,10 @@ function render(){ const aiWrap=document.getElementById('aiTop'), meWrap=documen
   state.players.forEach((p,idx)=>{ const area=document.createElement('div'); area.className='playerArea'+(p.isHuman?' me':''); if(idx===state.turn && state.roundActive) area.classList.add('turnGlow');
     const hdr=document.createElement('div'); hdr.className='playerHeader'; const left=document.createElement('div'); left.innerHTML=`<b>${p.name}</b> <span class="badge">hand: ${p.hand.filter(Boolean).length}</span>`; const right=document.createElement('div'); right.innerHTML=`<span class="badge">table: ${faceUpCards(p).length + faceDownCount(p)}</span>`; hdr.append(left,right); area.append(hdr);
     const slotRow=document.createElement('div'); slotRow.style.display='grid'; slotRow.style.gridTemplateColumns='repeat(4, 56px)'; slotRow.style.gap='8px';
-    p.slots.forEach((s,slotIdx)=>{ const col=document.createElement('div'); col.style.display='grid'; col.style.gridTemplateRows='1fr 1fr'; col.style.gap='4px';
-      if(s?.up){ const upEl=makeCardEl(s.up,!p.isHuman,false); if(p.isHuman && state.turn===p.id && state.roundActive){ const qtyFU=countFaceUpRank(p,s.up.r); upEl.classList.add('playable'); upEl.onclick=()=>promptCountAndPlay(s.up.r,'faceUp',qtyFU); } col.append(upEl); }
-      else { const empty=document.createElement('div'); empty.style.height='68px'; col.append(empty); }
-      if(s?.down){ const downEl=makeCardEl({r:'',s:'♠'},!p.isHuman,true); if(p.isHuman && state.turn===p.id && state.roundActive && !s.up){ downEl.classList.add('playable'); downEl.title='Flip this face-down card'; downEl.onclick=()=>tryFlipFaceDownSlot(slotIdx); } col.append(downEl); }
-      else { const gone=document.createElement('div'); gone.style.height='68px'; col.append(gone); }
+    p.slots.forEach((s,slotIdx)=>{ const col=document.createElement('div'); col.style.height='68px'; col.style.position='relative';
+      if(s?.down){ const downEl=makeCardEl({r:'',s:'♠'},!p.isHuman,true); downEl.style.position='absolute'; downEl.style.top='6px'; downEl.style.left='0'; downEl.style.transform='scale(0.98)'; if(p.isHuman && state.turn===p.id && state.roundActive && !s.up){ downEl.classList.add('playable'); downEl.title='Flip this face-down card'; downEl.onclick=()=>tryFlipFaceDownSlot(slotIdx); } col.append(downEl); }
+      if(s?.up){ const upEl=makeCardEl(s.up,!p.isHuman,false); upEl.style.position='absolute'; upEl.style.top='0'; upEl.style.left='0'; upEl.style.zIndex='2'; if(p.isHuman && state.turn===p.id && state.roundActive){ const qtyFU=countFaceUpRank(p,s.up.r); upEl.classList.add('playable'); upEl.onclick=()=>promptCountAndPlay(s.up.r,'faceUp',qtyFU); } col.append(upEl); }
+      if(!s?.up && !s?.down){ const empty=document.createElement('div'); empty.style.height='68px'; col.append(empty); }
       slotRow.append(col); });
     const fuSec=document.createElement('div'); fuSec.className='section'; fuSec.innerHTML='<h3>Table (4 up over 4 down)</h3>'; area.append(fuSec); area.append(slotRow);
     if(p.isHuman){ const handSec=document.createElement('div'); handSec.className='section'; handSec.innerHTML='<h3>Your Hand</h3>'; const handRow=document.createElement('div'); handRow.className='stack'; const groups=groupByRank(p.hand); Object.keys(groups).sort((a,b)=>RVAL[a]-RVAL[b]).forEach(r=>{ const qty=groups[r].length; const wrap=document.createElement('div'); wrap.style.display='flex'; wrap.style.gap='4px'; groups[r].forEach(()=>{ const el=makeCardEl({r,s:'♠'},false,false); if(canPlayRank(r)) el.classList.add('playable'); el.onclick=()=>promptCountAndPlay(r,'hand',qty); wrap.append(el); }); handRow.append(wrap); }); area.append(handSec); area.append(handRow); }
@@ -314,7 +313,7 @@ async function playCards(player,rank,source,count,includeFU=false,includeHand=fa
 function maybeDeclare(p){ const remaining=p.hand.filter(Boolean).length + faceUpCards(p).length + faceDownCount(p); if(remaining===1 && !state.mustDeclare.has(p.id)){ state.mustDeclare.add(p.id); toast(`${p.name}: "One card!"`); log(`${p.name} declares: one card`); }
   // AI one-card modal (blocking)
   if(!p.isHuman && remaining===1){ showBlockingModal(`${p.name} has one card left.`); }
-  // Warn threshold modal (AI only) — blocking per your request
+  // Warn threshold modal (AI only)
   if(settings.warnOn && !p.isHuman){ const key=p.id; const prev=(state.warnedAt.get(key)||Infinity); if(remaining<=settings.warnThresh && remaining>0 && remaining<prev){ showBlockingModal(`${p.name} has ${remaining} cards left.`); state.warnedAt.set(key,remaining); } if(remaining>settings.warnThresh){ state.warnedAt.delete(key); } }
 }
 function hasCards(p){ return p.hand.filter(Boolean).length + faceUpCards(p).length + faceDownCount(p) > 0; }
@@ -487,14 +486,19 @@ function placeMiniByCorner(corner){ const mini=document.getElementById('miniPile
 function renderMiniPile(){ const mini=document.getElementById('miniPile'); const mInfo=document.getElementById('miniInfo'); const mMore=document.getElementById('miniMore'); const mStack=document.getElementById('miniStack'); mStack.innerHTML=''; state.pile.filter(Boolean).forEach(c=> mStack.append(makeCardEl(c,true,false)) ); mInfo.textContent= state.currentValue? `${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start'; const overflow = mStack.scrollHeight > mini.clientHeight; mMore.textContent = overflow ? 'Scroll to see all' : ''; mini.scrollTop = mini.scrollHeight; placeMiniByCorner(settings.miniCorner||'tr'); const anchor=document.getElementById('miniAnchor'); if(settings.miniHidden){ mini.style.display='none'; anchor.style.display='flex'; }else{ anchor.style.display='none'; }
 }
 let miniObserverInitialized=false; function initMiniObserver(){ if(miniObserverInitialized) return; miniObserverInitialized=true; const target=document.getElementById('centerPile'); const mini=document.getElementById('miniPile'); const anchor=document.getElementById('miniAnchor'); if(!('IntersectionObserver' in window) || !target) return; const io=new IntersectionObserver((entries)=>{ const e=entries[0]; const mobile=window.innerWidth<=900; if(mobile && (!e.isIntersecting) && !settings.miniHidden) mini.style.display='block'; else mini.style.display='none'; anchor.style.display = (mobile && settings.miniHidden) ? 'flex' : 'none'; },{root:null,threshold:0.1}); io.observe(target);
-  // Tap to hide/show
-  mini.addEventListener('click',()=>{ if(!settings.miniTap) return; settings.miniHidden=true; saveSettings(); renderMiniPile(); }); anchor.addEventListener('click',()=>{ settings.miniHidden=false; saveSettings(); const mini=document.getElementById('miniPile'); mini.style.display='block'; renderMiniPile(); });
+  // Hold-to-hide gesture if enabled
+  let pressTimer=null; const PRESS_MS=1500; function startPress(){ if(!settings.miniTap) return; if(pressTimer) clearTimeout(pressTimer); pressTimer=setTimeout(()=>{ settings.miniHidden=true; saveSettings(); renderMiniPile(); pressTimer=null; },PRESS_MS); }
+  function cancelPress(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } }
+  mini.addEventListener('mousedown',startPress); mini.addEventListener('touchstart',startPress,{passive:true}); mini.addEventListener('mouseup',cancelPress); mini.addEventListener('mouseleave',cancelPress); mini.addEventListener('touchend',cancelPress);
+  anchor.addEventListener('click',()=>{ settings.miniHidden=false; saveSettings(); const mini=document.getElementById('miniPile'); mini.style.display='block'; renderMiniPile(); });
   // Drag to move & snap
-  let dragging=false, startX=0, startY=0, baseX=0, baseY=0; function onDown(e){ dragging=true; const rect=mini.getBoundingClientRect(); baseX=rect.left; baseY=rect.top; startX=(e.touches?e.touches[0].clientX:e.clientX); startY=(e.touches?e.touches[0].clientY:e.clientY); e.preventDefault(); }
+  let dragging=false, startX=0, startY=0, baseX=0, baseY=0; function onDown(e){ dragging=true; cancelPress(); const rect=mini.getBoundingClientRect(); baseX=rect.left; baseY=rect.top; startX=(e.touches?e.touches[0].clientX:e.clientX); startY=(e.touches?e.touches[0].clientY:e.clientY); e.preventDefault(); }
   function onMove(e){ if(!dragging) return; const x=(e.touches?e.touches[0].clientX:e.clientX); const y=(e.touches?e.touches[0].clientY:e.clientY); const nx=baseX+(x-startX); const ny=baseY+(y-startY); mini.style.left=nx+'px'; mini.style.top=ny+'px'; mini.style.right='auto'; mini.style.bottom='auto'; }
   function onUp(){ if(!dragging) return; dragging=false; const rect=mini.getBoundingClientRect(); const cx=rect.left + rect.width/2; const cy=rect.top + rect.height/2; const corner = (cy<window.innerHeight/2 ? 't' : 'b') + (cx<window.innerWidth/2 ? 'l':'r'); settings.miniCorner=corner; saveSettings(); placeMiniByCorner(corner); }
   mini.addEventListener('mousedown',onDown); mini.addEventListener('touchstart',onDown,{passive:false}); window.addEventListener('mousemove',onMove); window.addEventListener('touchmove',onMove,{passive:false}); window.addEventListener('mouseup',onUp); window.addEventListener('touchend',onUp);
 }
+
+function incPickup(p){ const m=state.roundStats?.pickups; if(!m) return; const prev=m.get(p.id)||0; m.set(p.id,prev+1); }
 
 // ===== Controls & Tests =====
 window.addEventListener('keydown',(e)=>{ if(e.key==='T' && e.shiftKey){ const b=document.getElementById('runTests'); if(b) b.classList.toggle('dev'); } });
@@ -533,12 +537,14 @@ function saveSettingsFromUI(){ const p=document.getElementById('setPauseBefore')
 
 // Init
 loadSettings();
+// restore AI difficulty
+try{ const savedDiff=localStorage.getItem('tens_ai_diff'); if(savedDiff){ const el=document.getElementById('aiDifficulty'); if(el) el.value=savedDiff; } }catch{}
 resetAll();
 initMiniObserver();
 
 // Events
   document.getElementById('playerCount').addEventListener('change',resetAll);
-  document.getElementById('aiDifficulty').addEventListener('change',()=>{ log(`AI difficulty set to ${displayDiffLabel()}`); });
+  document.getElementById('aiDifficulty').addEventListener('change',()=>{ const sel=document.getElementById('aiDifficulty').value; try{ localStorage.setItem('tens_ai_diff', sel); }catch{} log(`AI difficulty set to ${displayDiffLabel()}`); });
   document.getElementById('newRound').addEventListener('click',startNewRound);
   document.getElementById('newGame').addEventListener('click',()=>{ forfeitMatch(); });
   document.getElementById('runTests').addEventListener('click',()=>{ runTests(); });
@@ -546,7 +552,7 @@ initMiniObserver();
   document.getElementById('setSave').addEventListener('click',saveSettingsFromUI);
   document.getElementById('setCancel').addEventListener('click',()=>{ document.getElementById('settingsModal').style.display='none'; });
   document.querySelector('#settingsModal .backdrop').addEventListener('click',()=>{ document.getElementById('settingsModal').style.display='none'; });
-  document.getElementById('scoreToggle').addEventListener('click',()=>{ const sb=document.getElementById('scorebar'); const c=sb.classList.toggle('collapsed'); document.getElementById('scoreToggle').textContent = c? 'Scores ▾' : 'Scores ▴'; });
+  document.getElementById('scoreToggle').addEventListener('click',()=>{ const sb=document.getElementById('scorebar'); const c=sb.classList.toggle('collapsed'); document.getElementById('scoreToggle').textContent = c? 'Status ▾' : 'Status ▴'; });
 </script>
 </body>
 </html>
