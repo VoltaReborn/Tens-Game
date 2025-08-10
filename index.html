@@ -122,7 +122,7 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 function scoringValue(rank){ if(rank==='10')return 30; if(['J','Q','K'].includes(rank))return 10; if(rank==='A')return 1; return Number(rank); }
 function decksForPlayers(p){ if(p===2)return 1; if(p<=5)return 2; if(p<=8)return 3; if(p<=10)return 4; if(p<=13)return 5; return 6; }
 function makeDeck(n){ const d=[]; for(let k=0;k<n;k++){ for(const s of SUITS){ for(const r of RANKS){ d.push({r,s}); } } } return shuffle(d); }
-function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j]]; } return a; }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 // ===== State =====
 const state={ players:[], pile:[], currentValue:null, currentCount:0, turn:0, roundActive:false, dealer:-1, matchActive:true, mustDeclare:new Set() };
