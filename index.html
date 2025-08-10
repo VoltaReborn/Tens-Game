@@ -127,7 +127,7 @@
 
   <div id="miniPile"><h4>Pile</h4><div id="miniInfo">—</div><div class="stack" id="miniStack"></div><div id="miniMore"></div></div>
 
-  <!-- Settings modal (moved above script so listeners can bind safely) -->
+  <!-- Settings modal -->
   <div class="modal" id="settingsModal">
     <div class="backdrop"></div>
     <div class="content">
@@ -162,8 +162,9 @@ function saveSettings(){ try{ localStorage.setItem('tens_settings',JSON.stringif
 const state={ players:[], pile:[], currentValue:null, currentCount:0, turn:0, roundActive:false, dealer:-1, matchActive:true, mustDeclare:new Set(), warnedAt:new Map() };
 function freshPlayers(n){
   const needAI=Math.max(0,n-1);
-  const bag=[]; while(bag.length<needAI){ const chunk=shuffle([...AI_NAMES]); for(const nm of chunk){ if(bag.length<needAI) bag.push(nm); } }
-  state.players=Array.from({length:n},(_,i)=>({id:i,name: i===0 ? 'You' : `${bag[i-1]} (AI)`, isHuman:i===0, hand:[], slots:[], score:0}));
+  const pool=shuffle([...AI_NAMES]);
+  const chosen=[]; for(let i=0;i<needAI;i++){ chosen.push(pool[i % pool.length]); }
+  state.players=Array.from({length:n},(_,i)=>({id:i,name: i===0 ? 'You' : `${chosen[i-1]} (AI)`, isHuman:i===0, hand:[], slots:[], score:0}));
 }
 function nextDealer(){ state.dealer=(state.dealer+1)%state.players.length; }
 function resetMatch(){ state.players.forEach(p=>p.score=0); state.dealer=-1; state.matchActive=true; logClear(); updateScores(); state.warnedAt.clear(); }
@@ -183,7 +184,6 @@ function countFaceUpRank(p,rank){ let n=0; for(const s of p.slots){ if(s && s.up
 function countHandRank(p,rank){ return p.hand.filter(c=>c && c.r===rank).length; }
 
 // ===== Render =====
-function cardLabel(c){ return c?.r||''; }
 function makeCardEl(card,small=false,hidden=false){ const d=document.createElement('div'); const rr=card?.r??''; const ss=settings.showSuits ? (card?.s??'♠') : '';
   d.className='card'+(small?' small':'')+(hidden?' faceDown':''); if(!hidden){ d.textContent=rr+(ss?` ${ss}`:''); if(settings.showSuits && (ss==='♥'||ss==='♦')) d.classList.add('red'); }
   return d; }
@@ -299,7 +299,9 @@ function showTransientModal(msg){ modalBase(msg,false); }
 
 // ===== Face-down flip =====
 async function tryFlipFaceDownSlot(slotIdx){ const p=state.players[state.turn]; const s=p.slots[slotIdx]; if(!s||s.up||!s.down) return; const c=s.down; s.down=null; if(!c){ render(); return; } const rv=RVAL[c.r]; const prevLabel=labelActive(); if(p.isHuman){ await showRevealModal(c); }
+  // Overplay on blind flip (non-10): pickup full pile + flipped card; same player continues
   if(state.currentValue!==null && rv>state.currentValue && c.r!=='10'){ const pileBefore=state.pile.slice(); const show=[...pileBefore,c]; logAction(`${p.name} flips ${c.r} over ${prevLabel}; picks up.`,{snapshotCards:show}); await maybePauseBefore('pickup',show,p.name); if(state.pile.length){ p.hand.push(...state.pile.filter(Boolean)); } state.pile = []; p.hand.push(c); state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(80); return p.isHuman? enableHumanChoices(): aiTakeTurn(p,true); }
+  // Normal flip path
   logAction(`${p.name} flips ${c.r}${p.isHuman?'':' (AI)'}; was ${prevLabel}.`,{snapshotCards:[...state.pile.slice(),c]}); state.pile.push(c);
   if(c.r==='10'){ const snap=[...state.pile]; await maybePauseBefore('clear',snap,p.name); await clearPile(p,'10 (blind)'); if(hasCards(p)) return enableHumanChoices(); }
   else {
@@ -307,17 +309,8 @@ async function tryFlipFaceDownSlot(slotIdx){ const p=state.players[state.turn]; 
     else if(rv===state.currentValue){ state.currentCount+=1; }
     else { state.currentValue=rv; state.currentCount=1; }
 
-    if(p.isHuman){ // prompt to include FU and/or hand (default checked)
-      const fuQty=countFaceUpRank(p,c.r); const hQty=countHandRank(p,c.r);
-      if(fuQty>0 || hQty>0){ const choice=await showRevealChoicePicker(c.r,fuQty,hQty); if(choice){ let toAdd=choice.count-1; // minus the flipped one
-          if(choice.useFU && fuQty>0){ const takeFU=Math.min(fuQty,toAdd); const extraFU=removeFaceUpOfRank(p,c.r,takeFU); state.pile.push(...extraFU); state.currentCount+=extraFU.length; toAdd-=extraFU.length; }
-          if(choice.useHand && hQty>0 && toAdd>0){ let moved=0; const rest=[]; for(const x of p.hand){ if(x && moved<toAdd && x.r===c.r){ state.pile.push(x); moved++; } else rest.push(x); } p.hand=rest; state.currentCount+=moved; }
-        }
-      }
-    } else {
-      const canFU=removeFaceUpOfRank(p,c.r,99); if(canFU.length){ state.pile.push(...canFU); state.currentCount+=canFU.length; }
-      let addH=[], rest=[]; for(const x of p.hand){ if(x && x.r===c.r) addH.push(x); else rest.push(x); } p.hand=rest; if(addH.length){ state.pile.push(...addH); state.currentCount+=addH.length; }
-    }
+    if(p.isHuman){ const fuQty=countFaceUpRank(p,c.r); const hQty=countHandRank(p,c.r); if(fuQty>0 || hQty>0){ const choice=await showRevealChoicePicker(c.r,fuQty,hQty); if(choice){ let toAdd=choice.count-1; if(choice.useFU && fuQty>0){ const takeFU=Math.min(fuQty,toAdd); const extraFU=removeFaceUpOfRank(p,c.r,takeFU); state.pile.push(...extraFU); state.currentCount+=extraFU.length; toAdd-=extraFU.length; } if(choice.useHand && hQty>0 && toAdd>0){ let moved=0; const rest=[]; for(const x of p.hand){ if(x && moved<toAdd && x.r===c.r){ state.pile.push(x); moved++; } else rest.push(x); } p.hand=rest; state.currentCount+=moved; } } } }
+    else { const canFU=removeFaceUpOfRank(p,c.r,99); if(canFU.length){ state.pile.push(...canFU); state.currentCount+=canFU.length; } let addH=[], rest=[]; for(const x of p.hand){ if(x && x.r===c.r) addH.push(x); else rest.push(x); } p.hand=rest; if(addH.length){ state.pile.push(...addH); state.currentCount+=addH.length; } }
 
     if(state.currentCount>=4){ const snap2=[...state.pile]; await maybePauseBefore('clear',snap2,p.name); await clearPile(p,`${c.r} reached ${state.currentCount}`); if(hasCards(p)) return enableHumanChoices(); }
   }
@@ -338,7 +331,7 @@ function aiLog(p,msg){ const diff=getAIDifficulty(); log(`${p.name} [${diff}]: $
 function pointsOf(cards){ return cards.reduce((acc,c)=>acc+scoringValue(c.r),0); }
 function unloadablePointsIfCleared(p,rank,from){ // excludes the trigger (e.g., the 10)
   const fu=faceUpCards(p), hand=p.hand; const same=(x)=>x?.r===rank; let pts=0; if(from!=='hand'){ pts+=pointsOf(hand.filter(same)); } if(from!=='faceUp'){ pts+=pointsOf(fu.filter(same)); } return pts; }
-async function aiTakeTurn(p,chain=false){ if(!state.roundActive) return; await sleep(chain?180:420); const fu=faceUpCards(p); const diff=getAIDifficulty(); const pileLen=state.pile.length;
+async function aiTakeTurn(p,chain=false){ if(!state.roundActive) { endOrNext(); return; } await sleep(chain?180:420); const fu=faceUpCards(p); const diff=getAIDifficulty(); const pileLen=state.pile.length;
   // Hold aces: remove A from legal set until forced
   const ranksAvail=new Set(); p.hand.forEach(c=>{ if(c?.r) ranksAvail.add(c.r); }); fu.forEach(c=>ranksAvail.add(c.r));
   let legal=[...ranksAvail].filter(r=>canPlayRank(r)); const nonAce=legal.filter(r=>r!=='A'); if(nonAce.length) legal=nonAce;
@@ -376,21 +369,42 @@ async function aiTakeTurn(p,chain=false){ if(!state.roundActive) return; await s
   endOrNext(); }
 
 // ===== Scoring / Rounds =====
-function scoreRound(finisher){ state.roundActive=false; const pts=state.players.map(p=>{ let s=0; p.hand.forEach(c=>{ if(!c) return; s+=scoringValue(c.r); }); faceUpCards(p).forEach(c=>s+=scoringValue(c.r)); p.slots.forEach(sl=>{ if(sl?.down) s+=scoringValue(sl.down.r); }); return s; }); pts.forEach((s,i)=> state.players[i].score+=s); log(`Round ended. ${finisher.name} went out. Scoring applied.`); updateScores(); const over=state.players.find(p=>p.score>=150); if(over){ state.matchActive=false; const winner=[...state.players].sort((a,b)=>a.score-b.score)[0]; toast(`Match Over! Winner: ${winner.name} (${winner.score})`); document.getElementById('status').textContent=`Match Over — Winner: ${winner.name}`; const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); // recap modal for human
-    showRoundRecap();
-    return; }
-  nextDealer(); dealRound(); document.getElementById('status').textContent=`New round. ${state.players[state.turn].name} to play.`; log(`New round begins. Dealer: ${state.players[state.dealer].name}. ${state.players[state.turn].name} starts.`); render(); if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]); }
+async function scoreRound(finisher){ state.roundActive=false; const pts=state.players.map(p=>{ let s=0; p.hand.forEach(c=>{ if(!c) return; s+=scoringValue(c.r); }); faceUpCards(p).forEach(c=>s+=scoringValue(c.r)); p.slots.forEach(sl=>{ if(sl?.down) s+=scoringValue(sl.down.r); }); return s; });
+  // Apply scores
+  pts.forEach((s,i)=> state.players[i].score+=s);
+  log(`Round ended. ${finisher.name} went out. Scoring applied.`);
+  updateScores();
+
+  // Human recap modal if the human still has cards/points
+  const me = state.players[0];
+  const meRemainingCards = me.hand.filter(Boolean).length + faceUpCards(me).length + faceDownCount(me);
+  if(meRemainingCards>0){ await showRoundRecap(); }
+
+  // Check match end
+  const over=state.players.find(p=>p.score>=150);
+  if(over){ state.matchActive=false; const winner=[...state.players].sort((a,b)=>a.score-b.score)[0]; toast(`Match Over! Winner: ${winner.name} (${winner.score})`); document.getElementById('status').textContent=`Match Over — Winner: ${winner.name}`; const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); return; }
+
+  // Next round
+  nextDealer();
+  dealRound();
+  document.getElementById('status').textContent=`New round. ${state.players[state.turn].name} to play.`;
+  log(`New round begins. Dealer: ${state.players[state.dealer].name}. ${state.players[state.turn].name} starts.`);
+  render();
+  if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]); }
 function updateScores(){ const wrap=document.getElementById('scores'); wrap.innerHTML=''; state.players.forEach(p=>{ const d=document.createElement('div'); d.className='slot'; d.textContent=`${p.name}: ${p.score}`; wrap.append(d); }); }
 function forfeitMatch(){ if(!state.roundActive && !state.matchActive) return; state.roundActive=false; state.matchActive=false; document.getElementById('status').textContent='You forfeited. Match ended.'; log('You forfeited. Match ended.'); const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); }
 
 // Round recap modal for human
-function showRoundRecap(){ const me=state.players[0]; if(!me) return; const pk=document.getElementById('picker'); pk.innerHTML=''; const t=document.createElement('div'); t.className='row'; const b=document.createElement('b'); b.textContent='Round Recap'; t.append(b); pk.append(t);
+function showRoundRecap(){ return new Promise(resolve=>{ const me=state.players[0]; if(!me){ resolve(); return; }
+  const pk=document.getElementById('picker'); pk.innerHTML='';
+  const t=document.createElement('div'); t.className='row'; const b=document.createElement('b'); b.textContent='Round Recap'; t.append(b); pk.append(t);
   const sec=(label,cards)=>{ const wrap=document.createElement('div'); const h=document.createElement('div'); h.textContent=label; h.style.margin='6px 0'; wrap.append(h); const st=document.createElement('div'); st.className='stack'; cards.forEach(c=>st.append(makeCardEl(c,true,false))); wrap.append(st); pk.append(wrap); };
   const hand=[...me.hand]; const fu=faceUpCards(me); const fd=me.slots.map(s=>s?.down).filter(Boolean);
   const points= hand.reduce((a,c)=>a+scoringValue(c.r),0) + fu.reduce((a,c)=>a+scoringValue(c.r),0) + fd.reduce((a,c)=>a+scoringValue(c.r),0);
   sec('Hand',hand); sec('Face-up',fu); sec('Face-down',fd);
   const big=document.createElement('div'); big.style.textAlign='center'; big.style.fontSize='22px'; big.style.fontWeight='800'; big.style.margin='8px 0 4px'; big.textContent=`Total points: ${points}`; pk.append(big);
-  const ok=document.createElement('button'); ok.textContent='OK'; ok.onclick=()=>{ pk.style.display='none'; }; pk.append(ok); pk.style.display='flex'; }
+  const ok=document.createElement('button'); ok.textContent='OK'; ok.onclick=()=>{ pk.style.display='none'; resolve(); }; pk.append(ok);
+  pk.style.display='flex'; }); }
 
 // ===== Floating mini pile =====
 function renderMiniPile(){ const mini=document.getElementById('miniPile'); const mInfo=document.getElementById('miniInfo'); const mMore=document.getElementById('miniMore'); const mStack=document.getElementById('miniStack'); mStack.innerHTML=''; state.pile.filter(Boolean).forEach(c=> mStack.append(makeCardEl(c,true,false)) ); mInfo.textContent= state.currentValue? `${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start'; const overflow = mStack.scrollHeight > mini.clientHeight; mMore.textContent = overflow ? 'Scroll to see all' : ''; }
