@@ -51,7 +51,7 @@
   .scores .slot{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.2); padding:6px 10px; border-radius:10px}
   .toast{position:fixed; top:16px; right:16px; background: #1a1a1a; color:#fff; padding:10px 12px; border-radius:10px; opacity:0; transform: translateY(-6px); transition: all .25s ease}
   .toast.show{opacity:1; transform: translateY(0)}
-  .picker{position:fixed; left:50%; transform:translateX(-50%); bottom:68px; background:#103a2a; border:1px solid #1d5e45; border-radius:14px; padding:10px 12px; display:none; gap:8px; align-items:center; box-shadow: 0 8px 30px rgba(0,0,0,.35);}
+  .picker{position:fixed; left:50%; transform:translateX(-50%); bottom:68px; background:#103a2a; border:1px solid #1d5e45; border-radius:14px; padding:10px 12px; display:none; gap:8px; align-items:center; box-shadow: 0 8px 30px rgba(0,0,0,.35); z-index:60;}
   .picker b{margin-right:8px}
   .picker button{background:#184b37}
   .picker .row{display:flex; gap:8px; align-items:center}
@@ -98,8 +98,8 @@
     .card{width:56px; height:80px; font-size:20px; border-radius:12px}
     .card.small{width:44px; height:64px; font-size:16px}
     /* Horizontal scroll for big hands */
-    .me .stack{flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; gap:8px; padding-bottom:6px}
-    .me .stack .card{flex:0 0 auto}
+    .me .stack{flex-wrap:wrap; overflow-x:visible; gap:8px; padding-bottom:0}
+    .me .stack .card{flex:initial}
     .scorebar{padding:10px 14px}
     .picker{left:0; right:0; transform:none; margin:0 8px; bottom:84px; border-radius:16px; padding:12px}
     .picker button{padding:10px 12px; font-size:16px; border-radius:10px}
@@ -125,7 +125,7 @@
   button, .card.playable{ touch-action: manipulation; }
 
   /* ===== Floating mini pile (mobile only) ===== */
-  #miniPile{ position: fixed; right: 10px; bottom: 116px; z-index: 50; display:none; width: 150px; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:8px; backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  #miniPile{ position: fixed; right: 10px; top: 10px; z-index: 50; display:none; width: 150px; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:8px; backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
   #miniPile h4{ margin:0 0 4px 0; font-size:12px; opacity:.9 }
   #miniInfo{ font-size:12px; opacity:.9; margin-bottom:6px }
   #miniStack .card{ transform: scale(.9); }
@@ -308,7 +308,7 @@ async function playCards(player, rank, source, count, includeFU=false, includeHa
     // If source was hand, the cards are already in hand; do nothing
     // Reset pile state
     state.currentValue=null; state.currentCount=0;
-    log(`${player.name} plays higher and must pick up the pile (including their card).`);
+    narr(player.name, `%NAME% plays higher and must pick up the pile (including their card).`, `You play higher and must pick up the pile (including your card).`);
     render();
     await sleep(200);
     // Same player immediately chooses a new play
@@ -452,7 +452,27 @@ async function tryFlipFaceDownSlot(slotIdx){
     if(state.pile.length){ p.hand.push(...state.pile); state.pile.length=0; }
     p.hand.push(c);
     state.currentValue=null; state.currentCount=0;
-    log(`${p.name} flips ${c.r} (higher) and must pick up the pile including it.`);
+    narr(p.name, `%NAME% flips ${c.r} (higher) and must pick up the pile including it.`, `You flip ${c.r} (higher) and must pick up the pile including it.`);
+    render(); logBoardState(); await sleep(200);
+    return p.isHuman ? enableHumanChoices() : aiTakeTurn(p,true);
+  }
+  // Otherwise, play it to the pile normally
+  state.pile.push(c);
+  if(c.r==="10"){ await clearPile(p, `10 (blind) by ${p.name}`); if(hasCards(p)) return enableHumanChoices(); }
+  else{
+    if(state.currentVa{
+  const p=state.players[state.turn];
+  const s=p.slots[slotIdx];
+  if(!s || s.up || !s.down) return;
+  const c=s.down; s.down=null; // revealed
+  // Blind play resolution
+  const rv=RVAL[c.r];
+  // If higher-than-last (and not a 10): pickup all + put revealed into hand, then choose anew
+  if(state.currentValue!==null && rv>state.currentValue && c.r!=="10"){
+    if(state.pile.length){ p.hand.push(...state.pile); state.pile.length=0; }
+    p.hand.push(c);
+    state.currentValue=null; state.currentCount=0;
+    narr(p.name, `%NAME% flips ${c.r} (higher) and must pick up the pile including it.`, `You flip ${c.r} (higher) and must pick up the pile including it.`);
     render(); await sleep(200);
     return p.isHuman ? enableHumanChoices() : aiTakeTurn(p,true);
   }
@@ -470,7 +490,7 @@ async function tryFlipFaceDownSlot(slotIdx){
 }
 
 // ======= Clear / Turn =======
-async function clearPile(byPlayer, reason){ if(state.pile.length){ log(`${byPlayer.name} clears the pile (${reason}).`); state.pile.length=0; } state.currentValue=null; state.currentCount=0; render(); await sleep(200); }
+async function clearPile(byPlayer, reason){ if(state.pile.length){ narr(byPlayer.name, `%NAME% clears the pile (${reason}).`, `You clear the pile (${reason}).`); state.pile.length=0; } state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(200); }{ if(state.pile.length){ log(`${byPlayer.name} clears the pile (${reason}).`); state.pile.length=0; } state.currentValue=null; state.currentCount=0; render(); await sleep(200); }
 
 function endOrNext(){ render(); const finisher=state.players.find(p=>!hasCards(p)); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
 
@@ -487,7 +507,7 @@ async function aiTakeTurn(p, chain=false){ if(!state.roundActive) return; await 
   if(fu.length===0 && p.slots.some(s=>s.down)){
     const i = p.slots.findIndex(s=>!s.up && s.down); if(i>=0){
       const s=p.slots[i]; const c=s.down; s.down=null; state.pile.push(c); const rv=RVAL[c.r]; if(c.r==='10'){ await clearPile(p,`10 (blind) by ${p.name}`); if(hasCards(p)) return aiTakeTurn(p,true); else return endOrNext(); }
-      if(state.currentValue===null){ state.currentValue=rv; state.currentCount=1; } else if(rv>state.currentValue){ p.hand.push(...state.pile); state.pile.length=0; state.currentValue=null; state.currentCount=0; log(`${p.name} picks up the pile (blind).`); await sleep(250); state.pile.push(c); state.currentValue=rv; state.currentCount=1; } else if(rv===state.currentValue){ state.currentCount+=1; } else { state.currentValue=rv; state.currentCount=1; }
+      if(state.currentValue===null){ state.currentValue=rv; state.currentCount=1; } else if(rv>state.currentValue){ p.hand.push(...state.pile); state.pile.length=0; state.currentValue=null; state.currentCount=0; narr(p.name, `%NAME% picks up the pile (blind).`, `You pick up the pile (blind).`); await sleep(250); state.pile.push(c); state.currentValue=rv; state.currentCount=1; } else if(rv===state.currentValue){ state.currentCount+=1; } else { state.currentValue=rv; state.currentCount=1; }
       const addH = p.hand.filter(x=>x.r===c.r); p.hand = p.hand.filter(x=>x.r!==c.r); const addFU = removeFaceUpOfRank(p, c.r, 99); const add=[...addH, ...addFU]; if(add.length){ state.pile.push(...add); state.currentCount += add.length; if(state.currentCount>=4){ await clearPile(p, `${c.r} reached ${state.currentCount}`); if(hasCards(p)) return aiTakeTurn(p,true); }
       }
       maybeDeclare(p); return endOrNext();
@@ -553,6 +573,8 @@ function initMiniObserver(){
 }
 
 function log(msg){ const el=document.getElementById('log'); const p=document.createElement('div'); p.textContent=msg; el.append(p); el.scrollTop=el.scrollHeight; }
+function narr(actor, third, second){ log(actor==='You' ? second : third.replace('%NAME%', actor)); }
+function logBoardState(){ const label = state.currentValue? `${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start'; log(`Board → ${label} (cards: ${state.pile.length})`); }
 function logClear(){ document.getElementById('log').innerHTML=''; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1600); }
 function enableHumanChoices(){ render(); }
@@ -587,21 +609,4 @@ async function runTests(){
   // 10) Round auto-advance when no one at 150
   freshPlayers(2); state.dealer=0; dealRound(); state.players[0].hand=[]; state.players[0].slots=[]; state.players[1].hand=[clone('A')]; state.players[1].slots=[]; state.players[0].score=20; state.players[1].score=40; scoreRound(state.players[0]); assert(state.roundActive===true,'Next round auto-started'); assert(state.matchActive===true,'Match continues');
   // 11) Blind flip higher-than-last: revealed goes to hand, turn stays
-  freshPlayers(2); state.dealer=0; dealRound(); const me6=state.players[0]; state.pile=[clone('5')]; state.currentValue=RVAL['5']; state.currentCount=1; me6.slots=[{up:null,down:clone('9')},{up:null,down:null},{up:null,down:null},{up:null,down:null}]; me6.hand=[]; state.roundActive=true; state.turn=0; await tryFlipFaceDownSlot(0); assert(me6.hand.some(c=>c.r==='9'),'Revealed higher card moved to hand'); assert(state.pile.length===0,'Pile moved to hand on over'); assert(state.turn===0,'Same player continues after pickup');
-  // 12) Match ends when >=150; no auto new round
-  freshPlayers(2); state.dealer=0; dealRound(); state.players[0].hand=[]; state.players[0].slots=[]; state.players[1].hand=[clone('A')]; state.players[1].slots=[]; state.players[0].score=149; state.players[1].score=40; scoreRound(state.players[0]); assert(state.matchActive===false,'Match ended at >=150');
-
-  document.getElementById('playerCount').value=String(sel); resetAll(); toast('All tests passed.'); log('All tests passed.');
-}
-
-// init
-resetAll();
-initMiniObserver();
-
-document.getElementById('playerCount').addEventListener('change', resetAll);
-document.getElementById('newRound').addEventListener('click', startNewRound);
-document.getElementById('newGame').addEventListener('click', ()=>{ resetMatch(); resetAll(); });
-document.getElementById('runTests').addEventListener('click', ()=>{ runTests(); });
-</script>
-</body>
-</html>
+  freshPlayers(2); state.dealer=0; dealRoun
