@@ -299,22 +299,6 @@ function showTransientModal(msg){ modalBase(msg,false); }
 
 // ===== Face-down flip =====
 async function tryFlipFaceDownSlot(slotIdx){ const p=state.players[state.turn]; const s=p.slots[slotIdx]; if(!s||s.up||!s.down) return; const c=s.down; s.down=null; if(!c){ render(); return; } const rv=RVAL[c.r]; const prevLabel=labelActive(); if(p.isHuman){ await showRevealModal(c); }
-  // Overplay on blind flip (non-10): pickup full pile + flipped card; same player continues
-  if(state.currentValue!==null && rv>state.currentValue && c.r!=='10'){ const pileBefore=state.pile.slice(); const show=[...pileBefore,c]; logAction(`${p.name} flips ${c.r} over ${prevLabel}; picks up.`,{snapshotCards:show}); await maybePauseBefore('pickup',show,p.name); if(state.pile.length){ p.hand.push(...state.pile.filter(Boolean)); } state.pile = []; p.hand.push(c); state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(80); return p.isHuman? enableHumanChoices(): aiTakeTurn(p,true); }
-  // Normal flip path
-  logAction(`${p.name} flips ${c.r}${p.isHuman?'':' (AI)'}; was ${prevLabel}.`,{snapshotCards:[...state.pile.slice(),c]}); state.pile.push(c);
-  if(c.r==='10'){ const snap=[...state.pile]; await maybePauseBefore('clear',snap,p.name); await clearPile(p,'10 (blind)'); if(hasCards(p)) return enableHumanChoices(); }
-  else {
-    if(state.currentValue===null){ state.currentValue=rv; state.currentCount=1; }
-    else if(rv===state.currentValue){ state.currentCount+=1; }
-    else { state.currentValue=rv; state.currentCount=1; }
-
-    if(p.isHuman){ const fuQty=countFaceUpRank(p,c.r); const hQty=countHandRank(p,c.r); if(fuQty>0 || hQty>0){ const choice=await showRevealChoicePicker(c.r,fuQty,hQty); if(choice){ let toAdd=choice.count-1; if(choice.useFU && fuQty>0){ const takeFU=Math.min(fuQty,toAdd); const extraFU=removeFaceUpOfRank(p,c.r,takeFU); state.pile.push(...extraFU); state.currentCount+=extraFU.length; toAdd-=extraFU.length; } if(choice.useHand && hQty>0 && toAdd>0){ let moved=0; const rest=[]; for(const x of p.hand){ if(x && moved<toAdd && x.r===c.r){ state.pile.push(x); moved++; } else rest.push(x); } p.hand=rest; state.currentCount+=moved; } } } }
-    else { const canFU=removeFaceUpOfRank(p,c.r,99); if(canFU.length){ state.pile.push(...canFU); state.currentCount+=canFU.length; } let addH=[], rest=[]; for(const x of p.hand){ if(x && x.r===c.r) addH.push(x); else rest.push(x); } p.hand=rest; if(addH.length){ state.pile.push(...addH); state.currentCount+=addH.length; } }
-
-    if(state.currentCount>=4){ const snap2=[...state.pile]; await maybePauseBefore('clear',snap2,p.name); await clearPile(p,`${c.r} reached ${state.currentCount}`); if(hasCards(p)) return enableHumanChoices(); }
-  }
-  maybeDeclare(p); logBoardState(); endOrNext(); } const rv=RVAL[c.r]; const prevLabel=labelActive(); if(p.isHuman){ await showRevealModal(c); }
   if(state.currentValue!==null && rv>state.currentValue && c.r!=='10'){ const pileBefore=state.pile.slice(); const show=[...pileBefore,c]; logAction(`${p.name} flips ${c.r} over ${prevLabel}; picks up.`,{snapshotCards:show}); await maybePauseBefore('pickup',show,p.name); if(state.pile.length){ p.hand.push(...state.pile.filter(Boolean)); } state.pile = []; p.hand.push(c); state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(80); return p.isHuman? enableHumanChoices(): aiTakeTurn(p,true); }
   logAction(`${p.name} flips ${c.r}${p.isHuman?'':' (AI)'}; was ${prevLabel}.`,{snapshotCards:[...state.pile.slice(),c]}); state.pile.push(c);
   if(c.r==='10'){ const snap=[...state.pile]; await maybePauseBefore('clear',snap,p.name); await clearPile(p,'10 (blind)'); if(hasCards(p)) return enableHumanChoices(); }
@@ -341,7 +325,7 @@ async function tryFlipFaceDownSlot(slotIdx){ const p=state.players[state.turn]; 
 
 // ===== Clear / Turn =====
 async function clearPile(byPlayer,reason){ if(state.pile.length){ const pileBefore=[...state.pile]; logAction(`${byPlayer.name} clears the pile (${reason}).`,{snapshotCards:pileBefore}); state.pile.length=0; } state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(200); }
-function endOrNext(){ render(); const finisher=state.players.find(p=>!hasCards(p)); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
+function endOrNext(){ render(); const finisher=state.players.find(p=>!hasCards(p)); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
 
 // ===== AI =====
 function getAIDifficulty(){ const el=document.getElementById('aiDifficulty'); return el? (el.value||'easy') : 'easy'; }
@@ -354,7 +338,7 @@ function aiLog(p,msg){ const diff=getAIDifficulty(); log(`${p.name} [${diff}]: $
 function pointsOf(cards){ return cards.reduce((acc,c)=>acc+scoringValue(c.r),0); }
 function unloadablePointsIfCleared(p,rank,from){ // excludes the trigger (e.g., the 10)
   const fu=faceUpCards(p), hand=p.hand; const same=(x)=>x?.r===rank; let pts=0; if(from!=='hand'){ pts+=pointsOf(hand.filter(same)); } if(from!=='faceUp'){ pts+=pointsOf(fu.filter(same)); } return pts; }
-async function aiTakeTurn(p,chain=false){ if(!state.roundActive) { endOrNext(); return; } await sleep(chain?180:420); const fu=faceUpCards(p); const diff=getAIDifficulty(); const pileLen=state.pile.length; if(!state.roundActive) return; await sleep(chain?180:420); const fu=faceUpCards(p); const diff=getAIDifficulty(); const pileLen=state.pile.length;
+async function aiTakeTurn(p,chain=false){ if(!state.roundActive) return; await sleep(chain?180:420); const fu=faceUpCards(p); const diff=getAIDifficulty(); const pileLen=state.pile.length;
   // Hold aces: remove A from legal set until forced
   const ranksAvail=new Set(); p.hand.forEach(c=>{ if(c?.r) ranksAvail.add(c.r); }); fu.forEach(c=>ranksAvail.add(c.r));
   let legal=[...ranksAvail].filter(r=>canPlayRank(r)); const nonAce=legal.filter(r=>r!=='A'); if(nonAce.length) legal=nonAce;
@@ -392,28 +376,7 @@ async function aiTakeTurn(p,chain=false){ if(!state.roundActive) { endOrNext(); 
   endOrNext(); }
 
 // ===== Scoring / Rounds =====
-async function scoreRound(finisher){ state.roundActive=false; const pts=state.players.map(p=>{ let s=0; p.hand.forEach(c=>{ if(!c) return; s+=scoringValue(c.r); }); faceUpCards(p).forEach(c=>s+=scoringValue(c.r)); p.slots.forEach(sl=>{ if(sl?.down) s+=scoringValue(sl.down.r); }); return s; });
-  // Apply scores
-  pts.forEach((s,i)=> state.players[i].score+=s);
-  log(`Round ended. ${finisher.name} went out. Scoring applied.`);
-  updateScores();
-
-  // Human recap modal if the human still has cards/points
-  const me = state.players[0];
-  const meRemainingCards = me.hand.filter(Boolean).length + faceUpCards(me).length + faceDownCount(me);
-  if(meRemainingCards>0){ await showRoundRecap(); }
-
-  // Check match end
-  const over=state.players.find(p=>p.score>=150);
-  if(over){ state.matchActive=false; const winner=[...state.players].sort((a,b)=>a.score-b.score)[0]; toast(`Match Over! Winner: ${winner.name} (${winner.score})`); document.getElementById('status').textContent=`Match Over — Winner: ${winner.name}`; const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); return; }
-
-  // Next round
-  nextDealer();
-  dealRound();
-  document.getElementById('status').textContent=`New round. ${state.players[state.turn].name} to play.`;
-  log(`New round begins. Dealer: ${state.players[state.dealer].name}. ${state.players[state.turn].name} starts.`);
-  render();
-  if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]); }); faceUpCards(p).forEach(c=>s+=scoringValue(c.r)); p.slots.forEach(sl=>{ if(sl?.down) s+=scoringValue(sl.down.r); }); return s; }); pts.forEach((s,i)=> state.players[i].score+=s); log(`Round ended. ${finisher.name} went out. Scoring applied.`); updateScores(); const over=state.players.find(p=>p.score>=150); if(over){ state.matchActive=false; const winner=[...state.players].sort((a,b)=>a.score-b.score)[0]; toast(`Match Over! Winner: ${winner.name} (${winner.score})`); document.getElementById('status').textContent=`Match Over — Winner: ${winner.name}`; const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); // recap modal for human
+function scoreRound(finisher){ state.roundActive=false; const pts=state.players.map(p=>{ let s=0; p.hand.forEach(c=>{ if(!c) return; s+=scoringValue(c.r); }); faceUpCards(p).forEach(c=>s+=scoringValue(c.r)); p.slots.forEach(sl=>{ if(sl?.down) s+=scoringValue(sl.down.r); }); return s; }); pts.forEach((s,i)=> state.players[i].score+=s); log(`Round ended. ${finisher.name} went out. Scoring applied.`); updateScores(); const over=state.players.find(p=>p.score>=150); if(over){ state.matchActive=false; const winner=[...state.players].sort((a,b)=>a.score-b.score)[0]; toast(`Match Over! Winner: ${winner.name} (${winner.score})`); document.getElementById('status').textContent=`Match Over — Winner: ${winner.name}`; const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); // recap modal for human
     showRoundRecap();
     return; }
   nextDealer(); dealRound(); document.getElementById('status').textContent=`New round. ${state.players[state.turn].name} to play.`; log(`New round begins. Dealer: ${state.players[state.dealer].name}. ${state.players[state.turn].name} starts.`); render(); if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]); }
@@ -421,16 +384,8 @@ function updateScores(){ const wrap=document.getElementById('scores'); wrap.inne
 function forfeitMatch(){ if(!state.roundActive && !state.matchActive) return; state.roundActive=false; state.matchActive=false; document.getElementById('status').textContent='You forfeited. Match ended.'; log('You forfeited. Match ended.'); const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); }
 
 // Round recap modal for human
-function showRoundRecap(){ return new Promise(resolve=>{ const me=state.players[0]; if(!me){ resolve(); return; }
-  const pk=document.getElementById('picker'); pk.innerHTML='';
-  const t=document.createElement('div'); t.className='row'; const b=document.createElement('b'); b.textContent='Round Recap'; t.append(b); pk.append(t);
+function showRoundRecap(){ const me=state.players[0]; if(!me) return; const pk=document.getElementById('picker'); pk.innerHTML=''; const t=document.createElement('div'); t.className='row'; const b=document.createElement('b'); b.textContent='Round Recap'; t.append(b); pk.append(t);
   const sec=(label,cards)=>{ const wrap=document.createElement('div'); const h=document.createElement('div'); h.textContent=label; h.style.margin='6px 0'; wrap.append(h); const st=document.createElement('div'); st.className='stack'; cards.forEach(c=>st.append(makeCardEl(c,true,false))); wrap.append(st); pk.append(wrap); };
-  const hand=[...me.hand]; const fu=faceUpCards(me); const fd=me.slots.map(s=>s?.down).filter(Boolean);
-  const points= hand.reduce((a,c)=>a+scoringValue(c.r),0) + fu.reduce((a,c)=>a+scoringValue(c.r),0) + fd.reduce((a,c)=>a+scoringValue(c.r),0);
-  sec('Hand',hand); sec('Face-up',fu); sec('Face-down',fd);
-  const big=document.createElement('div'); big.style.textAlign='center'; big.style.fontSize='22px'; big.style.fontWeight='800'; big.style.margin='8px 0 4px'; big.textContent=`Total points: ${points}`; pk.append(big);
-  const ok=document.createElement('button'); ok.textContent='OK'; ok.onclick=()=>{ pk.style.display='none'; resolve(); }; pk.append(ok);
-  pk.style.display='flex'; }); };
   const hand=[...me.hand]; const fu=faceUpCards(me); const fd=me.slots.map(s=>s?.down).filter(Boolean);
   const points= hand.reduce((a,c)=>a+scoringValue(c.r),0) + fu.reduce((a,c)=>a+scoringValue(c.r),0) + fd.reduce((a,c)=>a+scoringValue(c.r),0);
   sec('Hand',hand); sec('Face-up',fu); sec('Face-down',fd);
