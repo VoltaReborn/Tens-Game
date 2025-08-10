@@ -34,9 +34,14 @@
   .me .playerHeader{color: var(--accent)}
   .turnGlow{box-shadow:0 0 0 3px rgba(240,195,106,.4), 0 0 0 8px rgba(240,195,106,.18)}
   .log{max-height:160px; overflow:auto; font-size:13px; background: rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:10px}
-  .scorebar{position:fixed; left:0; right:0; bottom:0; background: rgba(10,90,60,.92); border-top:1px solid rgba(255,255,255,.15); display:flex; gap:12px; padding:10px 16px; align-items:center; backdrop-filter: blur(6px)}
-  .scores{display:flex; gap:10px; flex-wrap:wrap; font-size:13px}
-  .scores .slot{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.2); padding:6px 10px; border-radius:10px}
+
+  /* Collapsible scorebar */
+  .scorebar{position:fixed; left:0; right:0; bottom:0; background: rgba(10,90,60,.92); border-top:1px solid rgba(255,255,255,.15); display:flex; gap:10px; padding:8px 10px; align-items:center; backdrop-filter: blur(6px)}
+  .scorebar .scores{display:flex; gap:10px; font-size:12px; overflow-x:auto; white-space:nowrap; flex:1}
+  .scorebar .slot{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.2); padding:4px 8px; border-radius:10px}
+  #scoreToggle{ background: rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:4px 8px; font-size:12px }
+  .scorebar.collapsed #status{ display:none }
+
   .toast{position:fixed; top:16px; right:16px; background:#1a1a1a; color:#fff; padding:10px 12px; border-radius:10px; opacity:0; transform: translateY(-6px); transition: all .25s ease}
   .toast.show{opacity:1; transform: translateY(0)}
   /* Picker */
@@ -45,17 +50,17 @@
   .picker button{background:#184b37}
   .picker .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
   .picker .choices{display:flex; gap:6px; flex-wrap:wrap; max-width:100%}
-  @media (max-width: 900px){ .table{padding:12px 12px 200px} .board{grid-template-columns: 1fr; gap:12px} .controls{gap:8px} select,button{font-size:16px; padding:12px 14px; border-radius:12px} .panel,.pile{border-radius:14px} .playerHeader .badge{font-size:12px} .card{width:56px; height:80px; font-size:20px; border-radius:12px} .card.small{width:44px; height:64px; font-size:16px} .stack{gap:8px} .scorebar{padding:10px 14px} .picker{left:0; right:0; transform:none; margin:0 8px; bottom:84px; border-radius:16px; padding:12px} .picker button{padding:10px 12px; font-size:16px; border-radius:10px} }
+  @media (max-width: 900px){ .table{padding:12px 12px 200px} .board{grid-template-columns: 1fr; gap:12px} .controls{gap:8px} select,button{font-size:16px; padding:12px 14px; border-radius:12px} .panel,.pile{border-radius:14px} .playerHeader .badge{font-size:12px} .card{width:56px; height:80px; font-size:20px; border-radius:12px} .card.small{width:44px; height:64px; font-size:16px} .stack{gap:8px} .scorebar{padding:6px 8px} .picker{left:0; right:0; transform:none; margin:0 8px; bottom:84px; border-radius:16px; padding:12px} .picker button{padding:10px 12px; font-size:16px; border-radius:10px} }
   @media (max-width: 600px){ h1{font-size:22px} .sub{font-size:14px} .controls{flex-direction:column; align-items:stretch} .controls label{display:flex; justify-content:space-between; align-items:center} .pile h3,.section h3{font-size:13px} .playerHeader{flex-direction:column; align-items:flex-start; gap:4px} .card{width:64px; height:92px; font-size:22px} .card.small{width:48px; height:72px; font-size:18px} .stack{gap:10px} #aiTop .playerArea{padding:8px} .scorebar{gap:8px} .scores{font-size:12px} .picker{bottom:92px} }
   *{ -webkit-tap-highlight-color: rgba(0,0,0,0) }
   button, .card.playable{ touch-action: manipulation }
   /* Mini pile */
-  #miniPile{ position: fixed; right: 10px; top: 10px; z-index: 50; display:none; width: 160px; max-height: 50vh; overflow:auto; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:8px; backdrop-filter: blur(6px); box-shadow:0 6px 24px rgba(0,0,0,.35) }
+  #miniPile{ position: fixed; right: 10px; top: 10px; z-index: 50; display:none; width: 170px; max-height: 50vh; overflow:auto; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:8px; backdrop-filter: blur(6px); box-shadow:0 6px 24px rgba(0,0,0,.35) }
   #miniPile h4{ margin:0 0 4px 0; font-size:12px; opacity:.9 }
   #miniInfo{ font-size:12px; opacity:.9; margin-bottom:6px }
   #miniMore{ font-size:11px; opacity:.9; margin-top:4px; text-align:right }
   #miniStack .card{ transform: scale(.9) }
-  .miniAnchor{ position:fixed; width:28px; height:28px; border-radius:14px; background: rgba(0,0,0,.38); border:1px solid rgba(255,255,255,.22); color:#fff; display:none; align-items:center; justify-content:center; z-index:49; font-size:12px; }
+  .miniAnchor{ position:fixed; width:36px; height:36px; border-radius:18px; background: rgba(0,0,0,.38); border:1px solid rgba(255,255,255,.22); color:#fff; display:none; align-items:center; justify-content:center; z-index:49; font-size:14px; }
   @media (min-width:901px){ #miniPile,.miniAnchor{ display:none !important } }
   /* Settings modal */
   #settingsBtn{ margin-left:auto }
@@ -65,6 +70,11 @@
   .modal h3{ margin:0 0 8px 0 }
   .modal .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 0 }
   .modal .actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:10px }
+  /* Round summary modal */
+  #roundModal .content{ max-width:720px }
+  .accordion .item{ border-top:1px solid rgba(255,255,255,.12); padding:8px 0 }
+  .accordion .item h4{ margin:0; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer }
+  .badgeChip{ background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); padding:2px 6px; border-radius:999px; font-size:11px }
 </style>
 </head>
 <body>
@@ -88,6 +98,7 @@
           <option value="medium">Medium</option>
           <option value="hard">Hard</option>
           <option value="expert">Expert</option>
+          <option value="adaptive">Adaptive (per round)</option>
           <option value="lose">Tries to lose 🤡</option>
         </select>
       </label>
@@ -118,8 +129,8 @@
     </div>
   </div>
 
-  <div class="scorebar">
-    <div><b>Scores</b></div>
+  <div class="scorebar collapsed" id="scorebar">
+    <button id="scoreToggle">Scores ▾</button>
     <div class="scores" id="scores"></div>
     <div style="margin-left:auto" id="status"></div>
   </div>
@@ -143,6 +154,16 @@
     </div>
   </div>
 
+  <!-- Round summary modal -->
+  <div class="modal" id="roundModal">
+    <div class="backdrop"></div>
+    <div class="content">
+      <h3 id="roundTitle">Round complete!</h3>
+      <div id="roundBody"></div>
+      <div class="actions"><button class="primary" id="roundOk">Start Next Round</button></div>
+    </div>
+  </div>
+
 <script>
 // ===== Utility =====
 const SUITS=["♠","♥","♦","♣"]; const RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"]; const RVAL=Object.fromEntries(RANKS.map((r,i)=>[r,i+1]));
@@ -163,7 +184,7 @@ function loadSettings(){ try{ const s=JSON.parse(localStorage.getItem('tens_sett
 function saveSettings(){ try{ localStorage.setItem('tens_settings',JSON.stringify(settings)); }catch{} }
 
 // ===== State =====
-const state={ players:[], pile:[], currentValue:null, currentCount:0, turn:0, roundActive:false, dealer:-1, matchActive:true, mustDeclare:new Set(), warnedAt:new Map() };
+const state={ players:[], pile:[], currentValue:null, currentCount:0, turn:0, roundActive:false, dealer:-1, matchActive:true, mustDeclare:new Set(), warnedAt:new Map(), roundStats:null, aiAdaptive:'medium' };
 function freshPlayers(n){
   const needAI=Math.max(0,n-1);
   const pool=shuffle([...AI_NAMES]);
@@ -178,7 +199,8 @@ function ensureDeckSizeFor(nPlayers){ const needEach=11+8; const needTotal=nPlay
 function dealRound(){ const d=ensureDeckSizeFor(state.players.length); for(const p of state.players){ p.hand=[]; p.slots=[]; }
   for(const p of state.players){ for(let i=0;i<4;i++){ const down=d.pop(); const up=d.pop(); p.slots.push({down,up}); } }
   for(const p of state.players){ for(let i=0;i<11;i++){ p.hand.push(d.pop()); } }
-  state.pile=[]; state.currentValue=null; state.currentCount=0; state.roundActive=true; state.mustDeclare.clear(); state.warnedAt.clear(); state.turn=(state.dealer+1)%state.players.length; }
+  state.pile=[]; state.currentValue=null; state.currentCount=0; state.roundActive=true; state.mustDeclare.clear(); state.warnedAt.clear(); state.turn=(state.dealer+1)%state.players.length; state.roundStats={ pickups:new Map() };
+}
 
 // ===== Helpers =====
 function faceUpCards(p){ const arr=[]; p.slots.forEach((s,idx)=>{ if(s && s.up){ arr.push({...s.up,_slot:idx}); } }); return arr; }
@@ -186,6 +208,7 @@ function faceDownCount(p){ return p.slots.filter(s=>!!(s&&s.down)).length; }
 function removeFaceUpOfRank(p,rank,count){ const removed=[]; for(const s of p.slots){ if(count && s && s.up && s.up.r===rank){ removed.push(s.up); s.up=null; count--; if(count===0) break; } } return removed; }
 function countFaceUpRank(p,rank){ let n=0; for(const s of p.slots){ if(s && s.up && s.up.r===rank) n++; } return n; }
 function countHandRank(p,rank){ return p.hand.filter(c=>c && c.r===rank).length; }
+function incPickup(p){ const cur=state.roundStats.pickups.get(p.id)||0; state.roundStats.pickups.set(p.id,cur+1); }
 
 // ===== Render =====
 function makeCardEl(card,small=false,hidden=false){ const d=document.createElement('div'); const rr=card?.r??''; const ss=settings.showSuits ? (card?.s??'♠') : '';
@@ -276,7 +299,7 @@ async function playCards(player,rank,source,count,includeFU=false,includeHand=fa
     if(state.pile.length){ player.hand.push(...state.pile.filter(Boolean)); }
     if(source==='faceUp'){ const moved=removeFaceUpOfRank(player,rank,count); if(moved.length) player.hand.push(...moved); }
     state.pile = [];
-    state.currentValue=null; state.currentCount=0; render(); await sleep(200); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true);
+    state.currentValue=null; state.currentCount=0; incPickup(player); render(); await sleep(200); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true);
   }
   let played=[]; if(source==='hand'){ let moved=0; const rest=[]; for(const c of player.hand){ if(c && moved<count && c.r===rank){ played.push(c); moved++; } else rest.push(c); } player.hand=rest; if(includeFU && moved<count){ const need=count-moved; const extra=removeFaceUpOfRank(player,rank,need); played.push(...extra); } }
   else if(source==='faceUp'){ const removed=removeFaceUpOfRank(player,rank,count); played.push(...removed); if(includeHand && removed.length<count){ const need=count-removed.length; let moved=0; const rest=[]; for(const c of player.hand){ if(c && moved<need && c.r===rank){ played.push(c); moved++; } else rest.push(c); } player.hand=rest; } }
@@ -291,20 +314,19 @@ async function playCards(player,rank,source,count,includeFU=false,includeHand=fa
 function maybeDeclare(p){ const remaining=p.hand.filter(Boolean).length + faceUpCards(p).length + faceDownCount(p); if(remaining===1 && !state.mustDeclare.has(p.id)){ state.mustDeclare.add(p.id); toast(`${p.name}: "One card!"`); log(`${p.name} declares: one card`); }
   // AI one-card modal (blocking)
   if(!p.isHuman && remaining===1){ showBlockingModal(`${p.name} has one card left.`); }
-  // Warn threshold modal (AI only)
-  if(settings.warnOn && !p.isHuman){ const key=p.id; const prev=(state.warnedAt.get(key)||Infinity); if(remaining<=settings.warnThresh && remaining>0 && remaining<prev){ showTransientModal(`${p.name} has ${remaining} cards left.`); state.warnedAt.set(key,remaining); } if(remaining>settings.warnThresh){ state.warnedAt.delete(key); } }
+  // Warn threshold modal (AI only) — blocking per your request
+  if(settings.warnOn && !p.isHuman){ const key=p.id; const prev=(state.warnedAt.get(key)||Infinity); if(remaining<=settings.warnThresh && remaining>0 && remaining<prev){ showBlockingModal(`${p.name} has ${remaining} cards left.`); state.warnedAt.set(key,remaining); } if(remaining>settings.warnThresh){ state.warnedAt.delete(key); } }
 }
 function hasCards(p){ return p.hand.filter(Boolean).length + faceUpCards(p).length + faceDownCount(p) > 0; }
 
 // ===== Modals =====
 function modalBase(msg,blocking=true){ const pk=document.getElementById('picker'); pk.innerHTML=''; const row=document.createElement('div'); row.className='row'; const b=document.createElement('b'); b.textContent=msg; row.append(b); pk.append(row); const ok=document.createElement('button'); ok.textContent='OK'; ok.onclick=()=>{ pk.style.display='none'; }; pk.append(ok); pk.style.display='flex'; if(!blocking){ setTimeout(()=>{ if(pk.style.display==='flex') pk.style.display='none'; },1400); } }
 function showBlockingModal(msg){ modalBase(msg,true); }
-function showTransientModal(msg){ modalBase(msg,false); }
 
 // ===== Face-down flip =====
 async function tryFlipFaceDownSlot(slotIdx){ const p=state.players[state.turn]; const s=p.slots[slotIdx]; if(!s||s.up||!s.down) return; const c=s.down; s.down=null; if(!c){ render(); return; } const rv=RVAL[c.r]; const prevLabel=labelActive(); if(p.isHuman){ await showRevealModal(c); }
   // Overplay on blind flip (non-10): pickup full pile + flipped card; same player continues
-  if(state.currentValue!==null && rv>state.currentValue && c.r!=='10'){ const pileBefore=state.pile.slice(); const show=[...pileBefore,c]; logAction(`${p.name} flips ${c.r} over ${prevLabel}; picks up.`,{snapshotCards:show}); await maybePauseBefore('pickup',show,p.name); if(state.pile.length){ p.hand.push(...state.pile.filter(Boolean)); } state.pile = []; p.hand.push(c); state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(80); return p.isHuman? enableHumanChoices(): aiTakeTurn(p,true); }
+  if(state.currentValue!==null && rv>state.currentValue && c.r!=='10'){ const pileBefore=state.pile.slice(); const show=[...pileBefore,c]; logAction(`${p.name} flips ${c.r} over ${prevLabel}; picks up.`,{snapshotCards:show}); await maybePauseBefore('pickup',show,p.name); if(state.pile.length){ p.hand.push(...state.pile.filter(Boolean)); } state.pile = []; p.hand.push(c); state.currentValue=null; state.currentCount=0; incPickup(p); render(); logBoardState(); await sleep(80); return p.isHuman? enableHumanChoices(): aiTakeTurn(p,true); }
   // Normal flip path
   logAction(`${p.name} flips ${c.r}${p.isHuman?'':' (AI)'}; was ${prevLabel}.`,{snapshotCards:[...state.pile.slice(),c]}); state.pile.push(c);
   if(c.r==='10'){ const snap=[...state.pile]; await maybePauseBefore('clear',snap,p.name); await clearPile(p,'10 (blind)'); if(hasCards(p)) return enableHumanChoices(); }
@@ -325,18 +347,19 @@ async function clearPile(byPlayer,reason){ if(state.pile.length){ const pileBefo
 function endOrNext(){ render(); const finisher=state.players.find(p=>!hasCards(p)); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
 
 // ===== AI =====
-function getAIDifficulty(){ const el=document.getElementById('aiDifficulty'); return el? (el.value||'easy') : 'easy'; }
+function getSelectedDifficulty(){ const el=document.getElementById('aiDifficulty'); return el? (el.value||'easy') : 'easy'; }
+function getAIDifficulty(){ const sel=getSelectedDifficulty(); if(sel==='adaptive') return state.aiAdaptive; return sel; }
+function displayDiffLabel(){ const sel=getSelectedDifficulty(); return sel==='adaptive' ? `Adaptive (${state.aiAdaptive})` : sel; }
 function rem(p){ return p.hand.filter(Boolean).length + faceUpCards(p).length + faceDownCount(p); }
 function everyoneEarly(){ return state.players.every(pl=> faceUpCards(pl).length===4 && faceDownCount(pl)===4 && pl.hand.filter(Boolean).length>=4); }
-function anyOpponentClose(n=6){ return state.players.some(pl=> pl.id!==state.turn && rem(pl) <= n); }
 function pileCounts(){ const m={}; for(const c of state.pile){ if(!c) continue; m[c.r]=(m[c.r]||0)+1; } return m; }
 function totalByRanks(m,ranks){ let s=0; for(const r of ranks){ s+=m[r]||0; } return s; }
-function aiLog(p,msg){ const diff=getAIDifficulty(); log(`${p.name} [${diff}]: ${msg}`); }
+function aiLog(p,msg){ log(`${p.name} [${displayDiffLabel()}]: ${msg}`); }
 function pointsOf(cards){ return cards.reduce((acc,c)=>acc+scoringValue(c.r),0); }
 function maxUnloadGroupPoints(p){ // best single-rank unload excluding 10s & Aces
   const fu=faceUpCards(p), hand=p.hand; const groups={}; [...fu,...hand].forEach(c=>{ if(!c) return; if(c.r==='10'||c.r==='A') return; groups[c.r]=(groups[c.r]||[]); groups[c.r].push(c); });
   let best=0; Object.values(groups).forEach(g=>{ best=Math.max(best, pointsOf(g)); }); return best; }
-function pilePointsAdjustedForGuaranteedClear(p){ const counts=pileCounts(); let pts=pointsOf(state.pile); for(const r in counts){ const have = countHandRank(p,r)+countFaceUpRank(p,r); if(r!=='A' && counts[r]+have>=4){ // would guarantee a clear; don't count those pile points against overplay
+function pilePointsAdjustedForGuaranteedClear(p){ const counts=pileCounts(); let pts=pointsOf(state.pile); for(const r in counts){ const have = countHandRank(p,r)+countFaceUpRank(p,r); if(r!=='A' && counts[r]+have>=4){ // would guarantee a clear; exclude those
       const rPts = counts[r]*scoringValue(r); pts -= rPts; }
   } return Math.max(0,pts); }
 async function aiTakeTurn(p,chain=false){ if(!state.roundActive) { endOrNext(); return; } await sleep(chain?180:420); const fu=faceUpCards(p); const diff=getAIDifficulty(); const pileLen=state.pile.length;
@@ -350,18 +373,15 @@ async function aiTakeTurn(p,chain=false){ if(!state.roundActive) { endOrNext(); 
     }
     if(single3 || few2s){ const higherFU=fu.map(c=>c.r).filter((r,i,a)=>a.indexOf(r)===i && RVAL[r]>state.currentValue); if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1); const higherH=[...new Set(p.hand.map(c=>c?.r))].filter(r=>r && RVAL[r]>state.currentValue); if(higherH.length) return playCards(p,higherH[0],'hand',1); const j=p.slots.findIndex(s=>s && !s.up && s.down); if(j>=0) return tryFlipFaceDownSlot(j); }
     if(diff==='expert'){ // Overplay if unload > pile points (adjusted) and pile not too diverse
-      if(distinct<3){ const pilePts = pilePointsAdjustedForGuaranteedClear(p); const unload = maxUnloadGroupPoints(p); if(unload>pilePts){ // also respect endgame caution
+      if(distinct<3){ const pilePts = pilePointsAdjustedForGuaranteedClear(p); const unload = maxUnloadGroupPoints(p); if(unload>pilePts){
           const higherFU=fu.map(c=>c.r).filter((r,i,a)=>a.indexOf(r)===i && RVAL[r]>state.currentValue); if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1); const higherH=[...new Set(p.hand.map(c=>c?.r))].filter(r=>r && RVAL[r]>state.currentValue); if(higherH.length) return playCards(p,higherH[0],'hand',1); const k=p.slots.findIndex(s=>s && !s.up && s.down); if(k>=0) return tryFlipFaceDownSlot(k); }
       }
     }
   }
   // Losing mode: try to gain cards
   if(diff==='lose'){
-    // Prefer overplay if possible
     if(state.currentValue!==null){ const higherFU=fu.map(c=>c.r).filter((r,i,a)=>a.indexOf(r)===i && RVAL[r]>state.currentValue); if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1); const higherH=[...new Set(p.hand.map(c=>c?.r))].filter(r=>r && RVAL[r]>state.currentValue); if(higherH.length) return playCards(p,higherH[0],'hand',1); }
-    // Otherwise flip blind to try to pick up
     const iLose=p.slots.findIndex(s=>s && !s.up && s.down); if(iLose>=0) return tryFlipFaceDownSlot(iLose);
-    // Otherwise, play lowest single (avoid clears)
     const fuAvail=fu.map(c=>c.r).filter((r,i,arr)=> arr.indexOf(r)===i && canPlayRank(r)); if(fuAvail.length){ fuAvail.sort((a,b)=>RVAL[a]-RVAL[b]); return playCards(p,fuAvail[0],'faceUp',1); }
     const ranks=[...new Set(p.hand.map(c=>c?.r))].filter(r=>r && canPlayRank(r)); if(ranks.length){ ranks.sort((a,b)=>RVAL[a]-RVAL[b]); return playCards(p,ranks[0],'hand',1); }
   }
@@ -373,71 +393,97 @@ async function aiTakeTurn(p,chain=false){ if(!state.roundActive) { endOrNext(); 
   const oppClose= state.players.some(pl=> pl.id!==p.id && rem(pl) <= 6);
   const early=everyoneEarly();
   const canClearNow=(r)=>{ const qty=p.hand.filter(c=>c?.r===r).length + fu.filter(c=>c.r===r).length + (state.currentValue!==null && RANKS[state.currentValue-1]===r ? state.currentCount : 0); return qty>=4; };
-  const considerClear=(r,from)=>{ if(diff==='hard'||diff==='expert'){ if(oppClose && !early){ const unloadPts = maxUnloadGroupPoints(p); if(unloadPts < 15) return false; } } return true; };
+  const considerClear=(r)=>{ if(diff==='hard'||diff==='expert'){ if(oppClose && !early){ const unloadPts = maxUnloadGroupPoints(p); if(unloadPts < 15) return false; } } return true; };
 
-  // Try non-10 clear first (if allowed)
-  for(const r of legal){ if(r==='10') continue; if(canClearNow(r) && considerClear(r,'mixed')){ const cntFU=fu.filter(c=>c.r===r).length; if(cntFU) return playCards(p,r,'faceUp',cntFU); const cntH=p.hand.filter(c=>c?.r===r).length; if(cntH) return playCards(p,r,'hand',cntH); } }
+  for(const r of legal){ if(r==='10') continue; if(canClearNow(r) && considerClear(r)){ const cntFU=fu.filter(c=>c.r===r).length; if(cntFU) return playCards(p,r,'faceUp',cntFU); const cntH=p.hand.filter(c=>c?.r===r).length; if(cntH) return playCards(p,r,'hand',cntH); } }
 
-  // 10 logic: conservative on hard/expert
+  // 10 logic
   const hasTenHand=p.hand.some(c=>c?.r==='10'); const hasTenFU=fu.some(c=>c.r==='10');
   if(hasTenHand||hasTenFU){ let use10=false; if(diff==='easy') use10 = oppClose || pileLen>6 || Math.random()<0.6; else if(diff==='medium') use10 = oppClose || pileLen>=10 || early; else { // hard/expert
-      const unloadPts = maxUnloadGroupPoints(p); // excluding 10s already
+      const unloadPts = maxUnloadGroupPoints(p);
       use10 = (!state.currentValue || pileLen>=12 || early) && (oppClose ? unloadPts>=15 : true);
     }
     if(use10){ if(hasTenHand) return playCards(p,'10','hand',1); else return playCards(p,'10','faceUp',1); }
   }
 
-  // Prefer playing from face-up (unlock face-downs), avoid Ace multiples
   const legalFU=fu.map(c=>c.r).filter((r,i,arr)=> arr.indexOf(r)===i && canPlayRank(r) && r!=='A'); if(legalFU.length){ legalFU.sort((a,b)=>RVAL[b]-RVAL[a]); const r=legalFU[0]; const cnt=fu.filter(c=>c.r===r).length; return playCards(p,r,'faceUp',cnt); }
   legal.sort((a,b)=>RVAL[b]-RVAL[a]); for(const r of legal){ if(r==='A') continue; const cntH=p.hand.filter(c=>c?.r===r).length; if(cntH){ return playCards(p,r,'hand',cntH); } }
-  // If only Ace playable, play a single Ace
   if(ranksAvail.has('A') && canPlayRank('A')){ if(countFaceUpRank(p,'A')>0) return playCards(p,'A','faceUp',1); if(p.hand.some(c=>c?.r==='A')) return playCards(p,'A','hand',1); }
-  // If nothing legal, try overplay or blind flip
   if(state.currentValue!==null){ const higherFU=fu.map(c=>c.r).filter((r,i,a)=>a.indexOf(r)===i && RVAL[r]>state.currentValue); if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1); const higherH=[...new Set(p.hand.map(c=>c?.r))].filter(r=>r && RVAL[r]>state.currentValue); if(higherH.length) return playCards(p,higherH[0],'hand',1); }
   const i=p.slots.findIndex(s=>s && !s.up && s.down); if(i>=0){ return tryFlipFaceDownSlot(i); }
   endOrNext(); }
 
 // ===== Scoring / Rounds =====
 async function scoreRound(finisher){ state.roundActive=false; const pts=state.players.map(p=>{ let s=0; p.hand.forEach(c=>{ if(!c) return; s+=scoringValue(c.r); }); faceUpCards(p).forEach(c=>s+=scoringValue(c.r)); p.slots.forEach(sl=>{ if(sl?.down) s+=scoringValue(sl.down.r); }); return s; });
-  // Apply scores
   pts.forEach((s,i)=> state.players[i].score+=s);
   log(`Round ended. ${finisher.name} went out. Scoring applied.`);
   updateScores();
 
-  // Human recap modal if the human still has cards/points
-  const me = state.players[0];
-  const meRemainingCards = me.hand.filter(Boolean).length + faceUpCards(me).length + faceDownCount(me);
-  if(meRemainingCards>0){ await showRoundRecap(); }
+  // Show end-of-round modal with scores and badges
+  await showEndOfRoundModal(finisher, pts);
 
-  // Check match end
   const over=state.players.find(p=>p.score>=150);
   if(over){ state.matchActive=false; const winner=[...state.players].sort((a,b)=>a.score-b.score)[0]; toast(`Match Over! Winner: ${winner.name} (${winner.score})`); document.getElementById('status').textContent=`Match Over — Winner: ${winner.name}`; const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); return; }
 
-  // Next round
+  // Adaptive (per round) step: adjust difficulty after each round if selected
+  if(getSelectedDifficulty()==='adaptive'){
+    const meScore = state.players[0].score; const minScore = Math.min(...state.players.map(p=>p.score));
+    const ladder=['easy','medium','hard','expert']; let idx=ladder.indexOf(state.aiAdaptive); if(idx<0) idx=1;
+    if(meScore===minScore && idx<ladder.length-1) idx++; else if(meScore>minScore && idx>0) idx--;
+    state.aiAdaptive = ladder[idx];
+    log(`AI difficulty (Adaptive) adjusted to: ${state.aiAdaptive}`);
+  }
+
   nextDealer();
   dealRound();
   document.getElementById('status').textContent=`New round. ${state.players[state.turn].name} to play.`;
   log(`New round begins. Dealer: ${state.players[state.dealer].name}. ${state.players[state.turn].name} starts.`);
   render();
   if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]); }
+
 function updateScores(){ const wrap=document.getElementById('scores'); wrap.innerHTML=''; state.players.forEach(p=>{ const d=document.createElement('div'); d.className='slot'; d.textContent=`${p.name}: ${p.score}`; wrap.append(d); }); }
 function forfeitMatch(){ if(!state.roundActive && !state.matchActive) return; state.roundActive=false; state.matchActive=false; document.getElementById('status').textContent='You forfeited. Match ended.'; log('You forfeited. Match ended.'); const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); }
 
-// Round recap modal for human
-function showRoundRecap(){ return new Promise(resolve=>{ const me=state.players[0]; if(!me){ resolve(); return; }
-  const pk=document.getElementById('picker'); pk.innerHTML='';
-  const t=document.createElement('div'); t.className='row'; const b=document.createElement('b'); b.textContent='Round Recap'; t.append(b); pk.append(t);
-  const sec=(label,cards)=>{ const wrap=document.createElement('div'); const h=document.createElement('div'); h.textContent=label; h.style.margin='6px 0'; wrap.append(h); const st=document.createElement('div'); st.className='stack'; cards.forEach(c=>st.append(makeCardEl(c,true,false))); wrap.append(st); pk.append(wrap); };
-  const hand=[...me.hand]; const fu=faceUpCards(me); const fd=me.slots.map(s=>s?.down).filter(Boolean);
-  const points= hand.reduce((a,c)=>a+scoringValue(c.r),0) + fu.reduce((a,c)=>a+scoringValue(c.r),0) + fd.reduce((a,c)=>a+scoringValue(c.r),0);
-  sec('Hand',hand); sec('Face-up',fu); sec('Face-down',fd);
-  const big=document.createElement('div'); big.style.textAlign='center'; big.style.fontSize='22px'; big.style.fontWeight='800'; big.style.margin='8px 0 4px'; big.textContent=`Total points: ${points}`; pk.append(big);
-  const ok=document.createElement('button'); ok.textContent='OK'; ok.onclick=()=>{ pk.style.display='none'; resolve(); }; pk.append(ok);
-  pk.style.display='flex'; }); }
+// End-of-round modal (all players; badges; expandable)
+function showEndOfRoundModal(finisher, roundPoints){ return new Promise(resolve=>{
+  const modal=document.getElementById('roundModal'); const body=document.getElementById('roundBody'); const title=document.getElementById('roundTitle'); const ok=document.getElementById('roundOk'); body.innerHTML='';
+  const matchOver = state.players.some(p=>p.score>=150);
+  title.textContent = matchOver ? `Match Over! ${([...state.players].sort((a,b)=>a.score-b.score)[0]).name} wins!` : `Round complete! ${finisher.name} went out!`;
+
+  // badges (most/least pickups)
+  let maxP=-1, minP=Infinity; state.players.forEach(p=>{ const v=(state.roundStats.pickups.get(p.id)||0); maxP=Math.max(maxP,v); minP=Math.min(minP,v); });
+
+  const acc=document.createElement('div'); acc.className='accordion';
+  state.players.forEach((p,idx)=>{
+    const item=document.createElement('div'); item.className='item';
+    const head=document.createElement('h4'); const pts=roundPoints[idx];
+    const badges=document.createElement('span');
+    const pc=(state.roundStats.pickups.get(p.id)||0);
+    if(pc===maxP && maxP>0){ const ch=document.createElement('span'); ch.className='badgeChip'; ch.title='Picked up the pile the most times this round'; ch.textContent='I want that pile!'; badges.append(ch); }
+    if(pc===minP){ const ch=document.createElement('span'); ch.className='badgeChip'; ch.style.marginLeft='6px'; ch.title='Picked up the pile the fewest times this round'; ch.textContent='Keep that pile away from me!'; badges.append(ch); }
+    head.innerHTML = `${p.name} — <b>${pts} pts</b>`; head.append(badges); item.append(head);
+
+    const bodyRow=document.createElement('div'); bodyRow.style.display='none';
+    const sec=(label,cards)=>{ const wrap=document.createElement('div'); const h=document.createElement('div'); h.textContent=label; h.style.margin='6px 0'; wrap.append(h); const st=document.createElement('div'); st.className='stack'; cards.forEach(c=>st.append(makeCardEl(c,true,false))); wrap.append(st); bodyRow.append(wrap); };
+    const hand=[...p.hand]; const fu=faceUpCards(p); const fd=p.slots.map(s=>s?.down).filter(Boolean);
+    if(idx===0){ // human expands by default
+      bodyRow.style.display='block';
+    }
+    sec('Hand',hand); sec('Face-up',fu); sec('Face-down',fd);
+
+    head.addEventListener('click',()=>{ bodyRow.style.display = bodyRow.style.display==='none' ? 'block' : 'none'; });
+    item.append(bodyRow);
+    acc.append(item);
+  });
+  body.append(acc);
+  ok.textContent = matchOver ? 'Start New Game' : 'Start Next Round';
+  ok.onclick=()=>{ modal.style.display='none'; resolve(); };
+  modal.style.display='flex';
+  }); }
 
 // ===== Floating mini pile =====
 function placeMiniByCorner(corner){ const mini=document.getElementById('miniPile'); const anchor=document.getElementById('miniAnchor'); const pos={tl:[10,10], tr:[window.innerWidth-10-mini.offsetWidth,10], bl:[10,window.innerHeight-10-mini.offsetHeight], br:[window.innerWidth-10-mini.offsetWidth, window.innerHeight-10-mini.offsetHeight]}; const [x,y]=pos[corner]||pos.tr; mini.style.left=x+'px'; mini.style.top=y+'px'; mini.style.right='auto'; mini.style.bottom='auto'; // anchor
-  const ax = corner.includes('l')? 10 : (window.innerWidth-38); const ay = corner.includes('t')? 10 : (window.innerHeight-38); anchor.style.left=ax+'px'; anchor.style.top=ay+'px'; }
+  const ax = corner.includes('l')? 10 : (window.innerWidth-46); const ay = corner.includes('t')? 10 : (window.innerHeight-46); anchor.style.left=ax+'px'; anchor.style.top=ay+'px'; }
 function renderMiniPile(){ const mini=document.getElementById('miniPile'); const mInfo=document.getElementById('miniInfo'); const mMore=document.getElementById('miniMore'); const mStack=document.getElementById('miniStack'); mStack.innerHTML=''; state.pile.filter(Boolean).forEach(c=> mStack.append(makeCardEl(c,true,false)) ); mInfo.textContent= state.currentValue? `${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start'; const overflow = mStack.scrollHeight > mini.clientHeight; mMore.textContent = overflow ? 'Scroll to see all' : ''; mini.scrollTop = mini.scrollHeight; placeMiniByCorner(settings.miniCorner||'tr'); const anchor=document.getElementById('miniAnchor'); if(settings.miniHidden){ mini.style.display='none'; anchor.style.display='flex'; }else{ anchor.style.display='none'; }
 }
 let miniObserverInitialized=false; function initMiniObserver(){ if(miniObserverInitialized) return; miniObserverInitialized=true; const target=document.getElementById('centerPile'); const mini=document.getElementById('miniPile'); const anchor=document.getElementById('miniAnchor'); if(!('IntersectionObserver' in window) || !target) return; const io=new IntersectionObserver((entries)=>{ const e=entries[0]; const mobile=window.innerWidth<=900; if(mobile && (!e.isIntersecting) && !settings.miniHidden) mini.style.display='block'; else mini.style.display='none'; anchor.style.display = (mobile && settings.miniHidden) ? 'flex' : 'none'; },{root:null,threshold:0.1}); io.observe(target);
@@ -492,7 +538,7 @@ initMiniObserver();
 
 // Events
   document.getElementById('playerCount').addEventListener('change',resetAll);
-  document.getElementById('aiDifficulty').addEventListener('change',()=>{ log(`AI difficulty set to ${getAIDifficulty()}`); });
+  document.getElementById('aiDifficulty').addEventListener('change',()=>{ log(`AI difficulty set to ${displayDiffLabel()}`); });
   document.getElementById('newRound').addEventListener('click',startNewRound);
   document.getElementById('newGame').addEventListener('click',()=>{ forfeitMatch(); });
   document.getElementById('runTests').addEventListener('click',()=>{ runTests(); });
@@ -500,6 +546,7 @@ initMiniObserver();
   document.getElementById('setSave').addEventListener('click',saveSettingsFromUI);
   document.getElementById('setCancel').addEventListener('click',()=>{ document.getElementById('settingsModal').style.display='none'; });
   document.querySelector('#settingsModal .backdrop').addEventListener('click',()=>{ document.getElementById('settingsModal').style.display='none'; });
+  document.getElementById('scoreToggle').addEventListener('click',()=>{ const sb=document.getElementById('scorebar'); const c=sb.classList.toggle('collapsed'); document.getElementById('scoreToggle').textContent = c? 'Scores ▾' : 'Scores ▴'; });
 </script>
 </body>
 </html>
