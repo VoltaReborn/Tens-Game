@@ -285,8 +285,11 @@ async function playCards(player,rank,source,count,includeFU=false,includeHand=fa
     const attempted=Array.from({length:count},()=>({r:rank,s:'♠'}));
     logAction(`${player.name} overplays with ${rank}×${count} (was ${prevLabel}); picks up.`,{snapshotCards:[...pileBefore,...attempted]});
     await maybePauseBefore('pickup',[...pileBefore,...attempted],player.name);
-    if(state.pile.length){ player.hand.push(...state.pile.filter(Boolean)); state.pile.length=0; }
+    if(state.pile.length){ player.hand.push(...state.pile.filter(Boolean)); }
+    // take the attempted card(s) back into hand as well when from faceUp
     if(source==='faceUp'){ const moved=removeFaceUpOfRank(player,rank,count); if(moved.length) player.hand.push(...moved); }
+    // clear the pile to table-empty
+    state.pile = [];
     state.currentValue=null; state.currentCount=0; render(); await sleep(200); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true);
   }
   let played=[]; if(source==='hand'){ let moved=0; const rest=[]; for(const c of player.hand){ if(c && moved<count && c.r===rank){ played.push(c); moved++; } else rest.push(c); } player.hand=rest; if(includeFU && moved<count){ const need=count-moved; const extra=removeFaceUpOfRank(player,rank,need); played.push(...extra); } }
@@ -305,14 +308,15 @@ function hasCards(p){ return p.hand.filter(Boolean).length + faceUpCards(p).leng
 // ===== Face-down flip =====
 async function tryFlipFaceDownSlot(slotIdx){ const p=state.players[state.turn]; const s=p.slots[slotIdx]; if(!s||s.up||!s.down) return; const c=s.down; s.down=null; if(!c){ render(); return; } const rv=RVAL[c.r]; const prevLabel=labelActive();
   if(p.isHuman){ await showRevealModal(c); }
-  // Overplay from blind (except 10 which clears)
+  // Overplay from blind (except 10 which clears). Take ENTIRE pile and the flipped card into hand; table pile becomes empty.
   if(state.currentValue!==null && rv>state.currentValue && c.r!=='10'){
     const pileBefore=state.pile.slice(); const show=[...pileBefore,c];
     logAction(`${p.name} flips ${c.r} over ${prevLabel}; picks up.`,{snapshotCards:show});
     await maybePauseBefore('pickup',show,p.name);
     if(state.pile.length){ p.hand.push(...state.pile.filter(Boolean)); }
+    state.pile = [];
     p.hand.push(c);
-    state.pile.length=0; state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(200);
+    state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(80);
     return p.isHuman? enableHumanChoices(): aiTakeTurn(p,true);
   }
   // Normal resolution (no overplay)
@@ -368,7 +372,7 @@ async function aiTakeTurn(p,chain=false){ if(!state.roundActive) return; await s
                      .sort((a,b)=>a.need-b.need);
   if(!acted && canClear.length){ const r=canClear[0].r; const cntFU=fu.filter(c=>c.r===r).length; aiLog(p,`plays ${r} to make four-of-a-kind and clear.`); acted=true; if(cntFU) return playCards(p,r,'faceUp',cntFU); return playCards(p,r,'hand',p.hand.filter(c=>c&&c.r===r).length); }
 
-  if(!acted && (diff==='hard'||diff==='expert') && state.currentValue!==null){ const counts=pileCounts(); const clearPotentials=RANKS.filter(r=> (counts[r]||0) + qty(r) >= 4); const multiPairs=Object.values(counts).filter(n=>n>=2).length; const lowRanks=['A','2','3']; const lowFrac= state.pile.length? (totalByRanks(counts,lowRanks)/state.pile.length):0; let gain=0; if(clearPotentials.length) gain+=8; if(multiPairs>=2) gain+=6; if(lowFrac>=0.5) gain+=4; const sizePenalty=Math.max(0,state.pile.length-8); const score=gain-sizePenalty; const threshold=(diff==='expert')?4:6; if(score>=threshold){ const higherFU=fu.map(c=>c.r).filter((r,i,a)=>a.indexOf(r)===i && RVAL[r]>state.currentValue); const higherH=[...ranksAvail].filter(r=>RVAL[r]>state.currentValue && p.hand.some(c=>c&&c.r===r)); const reason=`(pairsOnPile=${multiPairs}, low%=${Math.floor(lowFrac*100)}%, clearTargets=${clearPotentials.join('/')||'—'})`; if(higherFU.length){ aiLog(p,`overplays with ${higherFU[0]} from face-up ${reason}.`); acted=true; return playCards(p,higherFU[0],'faceUp',1); } if(higherH.length){ aiLog(p,`overplays with ${higherH[0]} from hand ${reason}.`); acted=true; return playCards(p,higherH[0],'hand',1); } } }
+  if(!acted && (diff==='hard'||diff==='expert') && state.currentValue!==null){ const counts=pileCounts(); const clearPotentials=RANKS.filter(r=> (counts[r]||0) + qty(r) >= 4); const multiPairs=Object.values(counts).filter(n=>n>=2).length; const lowRanks=['A','2','3']; const lowFrac= state.pile.length? (totalByRanks(counts,lowRanks)/state.pile.length):0; let gain=0; if(clearPotentials.length) gain+=8; if(multiPairs>=2) gain+=6; if(lowFrac>=0.5) gain+=4; const sizePenalty=Math.max(0,state.pile.length-8); const score=gain-sizePenalty; const threshold=(diff==='expert')?4:6; if(score>=threshold){ const higherFU=fu.map(c=>c.r).filter((r,i,a)=>a.indexOf(r)===i && RVAL[r]>state.currentValue); const higherH=[...ranksAvail].filter(r=>RVAL[r]>state.currentValue && p.hand.some(c=>c&&c.r===r)); const reason=`(pairsOnPile=${Math.floor(multiPairs)}, low%=${Math.floor(lowFrac*100)}%, clearTargets=${clearPotentials.join('/')||'—'})`; if(higherFU.length){ aiLog(p,`overplays with ${higherFU[0]} from face-up ${reason}.`); acted=true; return playCards(p,higherFU[0],'faceUp',1); } if(higherH.length){ aiLog(p,`overplays with ${higherH[0]} from hand ${reason}.`); acted=true; return playCards(p,higherH[0],'hand',1); } } }
 
   if(!acted && diff!=='easy'){ const legalFU=fu.map(c=>c.r).filter((r,i,arr)=> arr.indexOf(r)===i && canPlayRank(r) && (hasNonAce? r!=='A': true)); if(legalFU.length){ legalFU.sort((a,b)=>RVAL[b]-RVAL[a]); const r=(diff==='expert'||diff==='hard')? legalFU[0] : legalFU[legalFU.length-1]; const cnt= r==='A' ? 1 : fu.filter(c=>c.r===r).length; aiLog(p,`plays ${r} from face-up (${cnt}).`); acted=true; return playCards(p,r,'faceUp',cnt); } }
   if(!acted){ legal.sort((a,b)=>RVAL[b]-RVAL[a]); for(const r of legal){ const cntFU=fu.filter(c=>c.r===r).length; if(cntFU){ const cnt = r==='A' ? 1 : cntFU; aiLog(p,`plays ${r} from face-up (${cnt}).`); acted=true; return playCards(p,r,'faceUp',cnt); } const cntH=p.hand.filter(c=>c&&c.r===r).length; if(cntH){ const cnt = r==='A' ? 1 : cntH; aiLog(p,`plays ${r} from hand (${cnt}).`); acted=true; return playCards(p,r,'hand',cnt); } } }
@@ -426,6 +430,8 @@ async function runTests(){ logClear(); log('Running rule tests…'); const sel=p
   freshPlayers(2); state.dealer=0; dealRound(); state.pile=[clone('4')]; state.currentValue=RVAL['4']; state.currentCount=1; state.turn=1; const ai=state.players[1]; ai.hand=[]; ai.slots=[{down:null,up:clone('9')},{down:null,up:null},{down:null,up:null},{down:null,up:null}]; await aiTakeTurn(ai,false); assert(state.turn===1,'After forced overplay pickup, same player continues');
   // Test 11: Human blind flip of Ace that does NOT clear should pass turn
   freshPlayers(2); state.dealer=0; dealRound(); state.pile=[clone('3')]; state.currentValue=RVAL['3']; state.currentCount=1; state.turn=0; state.players[0].slots=[{down:clone('A'),up:null},{down:null,up:null},{down:null,up:null},{down:null,up:null}]; const turnBefore=state.turn; await tryFlipFaceDownSlot(0); assert(state.currentValue===RVAL['A'],'Active value becomes Ace'); assert(state.turn!==turnBefore || !hasCards(state.players[0]) || state.currentCount>=4,'Turn should advance unless a clear occurred');
+  // Test 12: Explicit non-clearing blind flip passes to next player (deterministic)
+  freshPlayers(2); state.dealer=0; dealRound(); state.pile=[clone('4')]; state.currentValue=RVAL['4']; state.currentCount=1; state.turn=0; state.players[0].slots=[{down:clone('A'),up:null},{down:null,up:null},{down:null,up:null},{down:null,up:null}]; await tryFlipFaceDownSlot(0); assert(state.currentValue===RVAL['A'],'Active becomes Ace'); assert(state.turn===1,'Turn passed to AI after non-clearing blind flip');
 
   document.getElementById('playerCount').value=String(sel); resetAll(); toast('Tests passed.'); log('Tests passed.'); }
 function resetAll(){ const n=parseInt(document.getElementById('playerCount').value,10); freshPlayers(n); state.dealer=-1; state.matchActive=true; logClear(); render(); }
