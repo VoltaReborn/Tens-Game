@@ -110,7 +110,7 @@ function render(){
     const slotRow = document.createElement('div');
     slotRow.style.display = 'grid';
     slotRow.style.gridTemplateColumns = 'repeat(4, 56px)';
-    slotRow.style.gap = '12px';
+    slotRow.style.gap = '16px';
     slotRow.style.marginBottom = (window.innerWidth <= 600 ? '22px' : '16px');
 
     p.slots.forEach((s, slotIdx) => {
