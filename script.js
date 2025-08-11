@@ -405,30 +405,14 @@ function showRevealChoicePicker(rank, fuQty, hQty){ return new Promise(function(
 
 // ===== Human interactions (picker) =====
 function promptCountAndPlay(rank, source, max){
-  if(!state.roundActive) return;
-  if(state.uiLock) return;
+  if(!state.roundActive || state.uiLock) return;
 
   const current = state.players[state.turn];
   if(!current || !current.isHuman) return;
 
   if(source==='faceUp' && countFaceUpRank(current, rank)===0) return;
 
-  // Auto-all copies for ranks OTHER than A,2,10
-  const autoEligible = settings.autoAll && !['A','2','10'].includes(rank);
-  if(autoEligible){
-    const fuQty = countFaceUpRank(current, rank);
-    const hQty  = countHandRank(current, rank);
-    const total = fuQty + hQty;
-    if(total > 0){
-      // Play as many as possible, combining both sources
-      // Prefer source clicked, but include the other as needed
-      const includeFU   = true;
-      const includeHand = true;
-      const count = (source === 'faceUp') ? Math.max(1, fuQty + hQty) : Math.max(1, hQty + fuQty);
-      return playCards(current, rank, source, count, includeFU, includeHand);
-    }
-  }
-
+  // 10 always plays exactly 1 immediately
   if(rank==='10'){
     playCards(current, rank, source, 1, false, false);
     return;
@@ -437,7 +421,17 @@ function promptCountAndPlay(rank, source, max){
   const fuQty = countFaceUpRank(current, rank);
   const hQty  = countHandRank(current, rank);
 
-  if(max===1){
+  // Auto-play all copies (except A, 2, 10)
+  if (settings.autoPlayCopies && !['A','2','10'].includes(rank)) {
+    const total = fuQty + hQty;
+    if (total >= 1) {
+      playCards(current, rank, source, total, fuQty>0, hQty>0);
+      return;
+    }
+  }
+
+  // If only 1 available with no extras elsewhere, just play 1
+  if (max === 1){
     const extrasElsewhere = (source==='hand') ? (fuQty>0) : (hQty>0);
     if(!extrasElsewhere){
       playCards(current, rank, source, 1, false, false);
@@ -445,11 +439,12 @@ function promptCountAndPlay(rank, source, max){
     }
   }
 
+  // Otherwise show the picker
   showPicker(rank, source, max);
 }
 
 function showPicker(rank, source, max) {
-  const autoPlay = state.settings.autoPlayMultiples; // new setting from your state
+  const autoPlay = !!settings.autoPlayCopies;
   const pk = document.getElementById('picker');
   pk.innerHTML = '';
   const p = state.players[state.turn];
@@ -516,14 +511,6 @@ function showPicker(rank, source, max) {
       capNote.textContent = 'Max: ' + countCap;
       pk.append(capNote);
     }
-  }
-
-  // Auto-play logic
-  const specialRanks = ['A', '2', '10'];
-  if (autoPlay && !specialRanks.includes(rank) && countCap > 1) {
-    pk.style.display = 'none';
-    playCards(state.players[state.turn], rank, source, countCap, includeFU, includeHand);
-    return;
   }
 
   // Build normal picker UI
@@ -1476,6 +1463,9 @@ function openSettings(){
   const s  = document.getElementById('setSuits');
   const mt = document.getElementById('setMiniTap');
   const sh = document.getElementById('setShowHint');
+  const ap = document.getElementById('setAutoPlayCopies');
+  ap.checked = !!settings.autoPlayCopies;
+  ap.onchange = ()=>{ settings.autoPlayCopies = ap.checked; saveSettings(); };
 
   // set current values
   p.checked  = !!settings.pauseBefore;
@@ -1484,6 +1474,7 @@ function openSettings(){
   s.checked  = !!settings.showSuits;
   mt.checked = !!settings.miniTap;
   sh.checked = !!settings.showHintBtn;
+  ap.checked = !!settings.autoPlayCopies;
 
   // auto-save handlers
   p.onchange = ()=>{ settings.pauseBefore = p.checked; saveSettings(); };
@@ -1492,6 +1483,7 @@ function openSettings(){
   s.onchange = ()=>{ settings.showSuits   = s.checked; saveSettings(); render(); };
   mt.onchange= ()=>{ settings.miniTap     = mt.checked; saveSettings(); };
   sh.onchange= ()=>{ settings.showHintBtn = sh.checked; saveSettings(); render(); };
+  ap.onchange= ()=>{ settings.autoPlayCopies = ap.checked; saveSettings(); };
 
   // ===== TABLE COLOR =====
   const presetWrap = document.getElementById('tablePresetChips');
