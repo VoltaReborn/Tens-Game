@@ -11,26 +11,34 @@ const FEMALE_NAMES=["Mary","Alicia","Ashley","Veronica","Kelly","Dana","Leslie",
 const AI_NAMES=[...MALE_NAMES,...FEMALE_NAMES];
 
 // ===== Settings (with persistence) =====
-const settings={ pauseBefore:false, warnOn:false, warnThresh:5, showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false, cardBack:'blueflame' };
+const settings = {
+  pauseBefore:false, warnOn:false, warnThresh:5,
+  showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false,
+  cardBack:'blueflame',           // normalized below
+  showHintBtn:true,
+  autoAll:false,                  // NEW: auto-play all copies (except A,2,10)
+  feltHex:'#0a5a3c',              // NEW: table color (hex)
+  cardFace:'light'                // NEW: 'light' | 'dark'
+};
+
 function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem('tens_settings') || 'null');
     if(s){ Object.assign(settings, s); }
   }catch(e){}
 
-  // Defaults for any new settings keys
   if (typeof settings.showHintBtn !== 'boolean') settings.showHintBtn = true;
+  if (!settings.feltHex) settings.feltHex = '#0a5a3c';
+  if (!settings.cardFace) settings.cardFace = 'light';
 
-  // Normalize legacy card-back names to current
-  if (typeof normalizeCardBack === 'function') {
-    settings.cardBack = normalizeCardBack(settings.cardBack || 'solid-blue');
-  } else {
-    settings.cardBack = settings.cardBack || 'solid-blue';
-  }
+  settings.cardBack = normalizeCardBack(settings.cardBack || 'solid-blue');
 
   // Apply immediately
   document.body.dataset.cardback = settings.cardBack;
+  document.body.dataset.cardface = settings.cardFace;
+  applyFelt(settings.feltHex);
 }
+
 // Normalize any legacy card-back value to a supported one
 function normalizeCardBack(val){
   if (val === 'blueflame' || val === 'wave' || val === 'classic') return 'solid-blue';
@@ -38,13 +46,13 @@ function normalizeCardBack(val){
 }
 
 function saveSettings(){
-  // ensure cardBack is valid before persisting + applying
   settings.cardBack = normalizeCardBack(settings.cardBack);
-  try{
-    localStorage.setItem('tens_settings', JSON.stringify(settings));
-  }catch(e){}
+  try{ localStorage.setItem('tens_settings', JSON.stringify(settings)); }catch(e){}
   document.body.dataset.cardback = settings.cardBack;
+  document.body.dataset.cardface = settings.cardFace;
+  applyFelt(settings.feltHex);
 }
+
 // ===== State =====
 const state = {
   players: [],
@@ -59,8 +67,10 @@ const state = {
   warnedAt: new Map(),
   roundStats: null,
   aiAdaptive: 'medium',
-  uiLock: false  // ← lock human input during forced flows (e.g., blind flip)
+  uiLock: false,           // ← lock human input during forced flows (e.g., blind flip)
+  roundHistory: []         // ← NEW: per-round points history [ [p0,p1,...], [p0,p1,...], ... ]
 };
+
 function freshPlayers(n){
   const needAI=Math.max(0,n-1);
   const pool=shuffle([...AI_NAMES]);
@@ -68,7 +78,16 @@ function freshPlayers(n){
   state.players=Array.from({length:n},(_,i)=>({id:i,name: i===0 ? 'You' : `${chosen[i-1]} (AI)`, isHuman:i===0, hand:[], slots:[], score:0}));
 }
 function nextDealer(){ state.dealer=(state.dealer+1)%state.players.length; }
-function resetMatch(){ state.players.forEach(p=>p.score=0); state.dealer=-1; state.matchActive=true; logClear(); updateScores(); state.warnedAt.clear(); }
+
+function resetMatch(){
+  state.players.forEach(p=>p.score=0);
+  state.dealer=-1;
+  state.matchActive=true;
+  logClear();
+  updateScores();
+  state.warnedAt.clear();
+  state.roundHistory = []; // ← reset stats history
+}
 
 // ===== Deal (ensure 11 hand + 4 up/4 down) =====
 // Build exactly the number of cards needed: players * 19.
@@ -292,6 +311,27 @@ function render(){
   renderMiniPile();
 }
 
+// ==== Theme helpers (felt gradient from a single base color) ====
+function hexToRgb(h){
+  const s = h.replace('#','');
+  const b = s.length===3 ? s.split('').map(ch=>ch+ch).join('') : s;
+  const n = parseInt(b,16);
+  return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
+}
+function rgbToHex({r,g,b}){
+  const h = (x)=>x.toString(16).padStart(2,'0');
+  return '#'+h(r)+h(g)+h(b);
+}
+function darken(hex, factor){ // factor 0..1 (e.g., .8)
+  const {r,g,b} = hexToRgb(hex);
+  return rgbToHex({r:Math.round(r*factor), g:Math.round(g*factor), b:Math.round(b*factor)});
+}
+function applyFelt(hex){
+  const dark = darken(hex, 0.75);
+  document.documentElement.style.setProperty('--felt', hex);
+  document.documentElement.style.setProperty('--felt-dark', dark);
+}
+
 // ===== Logging & UI Helpers =====
 function log(msg){ const el=document.getElementById('log'); const p=document.createElement('div'); p.textContent=msg; el.append(p); el.scrollTop=el.scrollHeight; }
 function labelActive(cv,cc){ const v=(typeof cv==='number'?cv:state.currentValue); const c=(typeof cc==='number'?cc:state.currentCount); return v? (RANKS[v-1]+' × '+c) : 'Fresh start'; }
@@ -334,12 +374,28 @@ function showRevealChoicePicker(rank, fuQty, hQty){ return new Promise(function(
 // ===== Human interactions (picker) =====
 function promptCountAndPlay(rank, source, max){
   if(!state.roundActive) return;
-  if(state.uiLock) return; // ← ignore clicks while a forced flow is in progress
+  if(state.uiLock) return;
 
   const current = state.players[state.turn];
   if(!current || !current.isHuman) return;
 
   if(source==='faceUp' && countFaceUpRank(current, rank)===0) return;
+
+  // Auto-all copies for ranks OTHER than A,2,10
+  const autoEligible = settings.autoAll && !['A','2','10'].includes(rank);
+  if(autoEligible){
+    const fuQty = countFaceUpRank(current, rank);
+    const hQty  = countHandRank(current, rank);
+    const total = fuQty + hQty;
+    if(total > 0){
+      // Play as many as possible, combining both sources
+      // Prefer source clicked, but include the other as needed
+      const includeFU   = true;
+      const includeHand = true;
+      const count = (source === 'faceUp') ? Math.max(1, fuQty + hQty) : Math.max(1, hQty + fuQty);
+      return playCards(current, rank, source, count, includeFU, includeHand);
+    }
+  }
 
   if(rank==='10'){
     playCards(current, rank, source, 1, false, false);
@@ -708,6 +764,11 @@ async function scoreRound(finisher){
     p.slots.forEach(function(sl){ if(sl&&sl.down) s+=scoringValue(sl.down.r); });
     return s;
   });
+
+  // Record this round's points for stats (NEW)
+  state.roundHistory.push(pts.slice());
+
+  // Add to match totals
   pts.forEach(function(s,i){ state.players[i].score += s; });
 
   log('Round ended. '+finisher.name+' went out. Scoring applied.');
@@ -734,7 +795,7 @@ async function scoreRound(finisher){
     return;
   }
 
-  // Prepare next round automatically
+  // Prepare next round automatically (unchanged)
   if(getSelectedDifficulty()==='adaptive'){
     const meScore = state.players[0].score; const minScore = Math.min.apply(null,state.players.map(function(p){return p.score;}));
     const ladder=['easy','medium','hard','expert']; let idx=ladder.indexOf(state.aiAdaptive); if(idx<0) idx=1;
@@ -768,7 +829,7 @@ function showEndOfRoundModal(finisher, roundPoints){
     finalScoresBox.innerHTML = '';
     finalScoresBox.style.display = 'none';
 
-    // Build accordion of end-of-round hands (unchanged from your previous logic)
+    // Build accordion of end-of-round hands (unchanged)
     let maxP=-1, minP=Infinity;
     state.players.forEach(function(p){ const v=(state.roundStats.pickups.get(p.id)||0); maxP=Math.max(maxP,v); minP=Math.min(minP,v); });
 
@@ -833,6 +894,17 @@ function showEndOfRoundModal(finisher, roundPoints){
       startNewBtn.style.display = '';
       viewBoardBtn.style.display = '';
 
+      // NEW: View Stats button
+      let statsBtn = document.getElementById('roundViewStats');
+      if(!statsBtn){
+        statsBtn = document.createElement('button');
+        statsBtn.id = 'roundViewStats';
+        statsBtn.textContent = 'View Stats';
+        actions.insertBefore(statsBtn, startNewBtn); // before Start New Game
+      }else{
+        statsBtn.style.display = '';
+      }
+
       startNewBtn.onclick = function(){
         modal.style.display = 'none';
         // Start a brand new game with current player count
@@ -843,6 +915,9 @@ function showEndOfRoundModal(finisher, roundPoints){
         modal.style.display = 'none';
         resolve();
       };
+      statsBtn.onclick = function(){
+        openStatsModal();
+      };
     } else {
       // Ongoing match: normal next-round button
       title.textContent = 'Round complete! ' + finisher.name + ' went out!';
@@ -850,6 +925,10 @@ function showEndOfRoundModal(finisher, roundPoints){
       okBtn.style.display = '';
       startNewBtn.style.display = 'none';
       viewBoardBtn.style.display = 'none';
+
+      // Hide stats button if it exists
+      const statsBtn = document.getElementById('roundViewStats');
+      if(statsBtn) statsBtn.style.display = 'none';
 
       okBtn.onclick = function(){
         modal.style.display = 'none';
@@ -859,6 +938,68 @@ function showEndOfRoundModal(finisher, roundPoints){
 
     modal.style.display='flex';
   });
+}
+
+function openStatsModal(){
+  const modal = document.getElementById('statsModal');
+  const sel   = document.getElementById('statsPlayer');
+  const chart = document.getElementById('statsChart');
+
+  // Build player list
+  sel.innerHTML = '';
+  state.players.forEach((p, idx)=>{
+    const opt = document.createElement('option');
+    opt.value = String(idx);
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+
+  function drawFor(playerIndex){
+    const series = state.roundHistory.map(r => r[playerIndex] || 0);
+    renderLineChart(chart, series);
+  }
+
+  sel.onchange = ()=> drawFor(parseInt(sel.value,10));
+
+  // default to "You" if present, else first
+  sel.value = '0';
+  drawFor(0);
+
+  modal.style.display = 'flex';
+
+  document.getElementById('statsClose').onclick = ()=>{ modal.style.display='none'; };
+  document.querySelector('#statsModal .backdrop').onclick = ()=>{ modal.style.display='none'; };
+}
+
+// Simple SVG line chart: y = points that round
+function renderLineChart(container, values){
+  const w = container.clientWidth || 520;
+  const h = 220;
+  const pad = {l:30, r:10, t:10, b:22};
+
+  const n = Math.max(1, values.length);
+  const maxY = Math.max(10, ...values);
+  const x = i => pad.l + (n<=1 ? 0 : (i/(n-1)))*(w - pad.l - pad.r);
+  const y = v => h - pad.b - (v/maxY)*(h - pad.t - pad.b);
+
+  const pts = values.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
+  const ticks = 4;
+  const yTicks = Array.from({length:ticks+1}, (_,i)=> Math.round((i*maxY)/ticks));
+
+  const svg = `
+  <svg viewBox="0 0 ${w} ${h}">
+    <g class="axis">
+      <line x1="${pad.l}" y1="${h-pad.b}" x2="${w-pad.r}" y2="${h-pad.b}" stroke="currentColor" />
+      <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${h-pad.b}" stroke="currentColor" />
+      ${yTicks.map(t => {
+        const yy = y(t);
+        return `<text x="${pad.l-6}" y="${yy+4}" text-anchor="end">${t}</text>`;
+      }).join('')}
+    </g>
+    <polyline fill="none" stroke="currentColor" stroke-width="2" points="${pts}"></polyline>
+    ${values.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="currentColor"></circle>`).join('')}
+  </svg>`;
+  container.innerHTML = svg;
 }
 
 // ===== Hint =====
@@ -1190,13 +1331,14 @@ function openSettings(){
   const m = document.getElementById('settingsModal');
   m.style.display = 'flex';
 
-  // Wire basic toggles
+  // Gameplay
   const p  = document.getElementById('setPauseBefore');
   const w  = document.getElementById('setWarnOn');
   const t  = document.getElementById('setWarnThresh');
   const s  = document.getElementById('setSuits');
   const mt = document.getElementById('setMiniTap');
   const sh = document.getElementById('setShowHint');
+  const aa = document.getElementById('setAutoAll');
 
   p.checked  = settings.pauseBefore;
   w.checked  = settings.warnOn;
@@ -1204,8 +1346,45 @@ function openSettings(){
   s.checked  = settings.showSuits;
   mt.checked = settings.miniTap;
   sh.checked = !!settings.showHintBtn;
+  aa.checked = !!settings.autoAll;
 
-  // Card-back options (legacy removed)
+  // Appearance: felt presets + color picker
+  const feltSwatches = document.getElementById('feltSwatches');
+  const feltMoreBtn  = document.getElementById('feltMore');
+  const feltPickerRow= document.getElementById('feltPickerRow');
+  const feltColor    = document.getElementById('feltColor');
+  const feltHexLabel = document.getElementById('feltHexLabel');
+
+  feltColor.value    = settings.feltHex;
+  feltHexLabel.textContent = settings.feltHex.toUpperCase();
+  Array.from(feltSwatches.querySelectorAll('.felt-swatch')).forEach(btn=>{
+    btn.onclick = ()=>{
+      const hex = btn.dataset.color;
+      settings.feltHex = hex;
+      applyFelt(hex);
+      feltColor.value = hex;
+      feltHexLabel.textContent = hex.toUpperCase();
+    };
+  });
+  feltMoreBtn.onclick = ()=>{
+    const open = feltPickerRow.style.display !== 'none';
+    feltPickerRow.style.display = open ? 'none' : 'flex';
+  };
+  feltColor.oninput = (e)=>{
+    settings.feltHex = e.target.value;
+    applyFelt(settings.feltHex);
+    feltHexLabel.textContent = settings.feltHex.toUpperCase();
+  };
+
+  // Card face theme
+  const cf = document.getElementById('setCardFace');
+  cf.value = settings.cardFace;
+  cf.onchange = ()=>{
+    settings.cardFace = cf.value;
+    document.body.dataset.cardface = settings.cardFace;
+  };
+
+  // Card-back options (same list you already had)
   const OPTIONS = [
     {value:'solid-blue',      label:'Solid Blue'},
     {value:'solid-red',       label:'Solid Red'},
@@ -1229,12 +1408,10 @@ function openSettings(){
     const hit = OPTIONS.find(o => o.value === val);
     return hit ? hit.label : val;
   }
-
   function renderPreview(){
     previewThumb.setAttribute('data-style', settings.cardBack);
     previewLabel.textContent = labelFor(settings.cardBack);
   }
-
   function buildGallery(){
     gallery.innerHTML = '';
     OPTIONS.forEach(opt => {
@@ -1249,21 +1426,19 @@ function openSettings(){
       `;
       btn.onclick = () => {
         settings.cardBack = opt.value;
-        saveSettings();               // persist + apply to body dataset
+        saveSettings();
         document.querySelectorAll('#cardBackGallery .cardback-option.selected')
           .forEach(n => n.classList.remove('selected'));
         btn.classList.add('selected');
         renderPreview();
-        renderMiniPile();             // live preview
+        renderMiniPile();
       };
       gallery.appendChild(btn);
     });
   }
-
   renderPreview();
   buildGallery();
 
-  // Toggle expand/collapse
   const expanded = ui.dataset.expanded === 'true';
   function setExpanded(on){
     ui.dataset.expanded = on ? 'true' : 'false';
@@ -1271,7 +1446,6 @@ function openSettings(){
     toggleBtn.textContent = on ? 'Hide Options' : 'Change';
   }
   setExpanded(expanded);
-
   toggleBtn.onclick = () => setExpanded(ui.dataset.expanded !== 'true');
 }
 
@@ -1282,6 +1456,9 @@ function saveSettingsFromUI(){
   const s  = document.getElementById('setSuits');
   const mt = document.getElementById('setMiniTap');
   const sh = document.getElementById('setShowHint');
+  const aa = document.getElementById('setAutoAll');
+  const cf = document.getElementById('setCardFace');
+  const feltColor = document.getElementById('feltColor');
 
   settings.pauseBefore = !!p.checked;
   settings.warnOn      = !!w.checked;
@@ -1289,6 +1466,9 @@ function saveSettingsFromUI(){
   settings.showSuits   = !!s.checked;
   settings.miniTap     = !!mt.checked;
   settings.showHintBtn = !!sh.checked;
+  settings.autoAll     = !!aa.checked;
+  settings.cardFace    = cf.value;
+  settings.feltHex     = feltColor.value;
 
   saveSettings();
   document.getElementById('settingsModal').style.display = 'none';

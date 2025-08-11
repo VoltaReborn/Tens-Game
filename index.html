@@ -78,13 +78,48 @@
   <div class="content">
     <h3>Settings</h3>
 
+    <!-- ===== Gameplay ===== -->
+    <h4 class="settings-section">Gameplay</h4>
     <div class="row"><span>Pause before board clear</span><input type="checkbox" id="setPauseBefore"></div>
     <div class="row"><span>Warn when an <b>AI</b> player has ≤ <input id="setWarnThresh" type="number" min="1" max="30" value="5" style="width:60px"> cards</span><input type="checkbox" id="setWarnOn"></div>
     <div class="row"><span>Show suits</span><input type="checkbox" id="setSuits"></div>
     <div class="row mobile-only"><span>Tap mini pile to hide/show</span><input type="checkbox" id="setMiniTap"></div>
     <div class="row"><span>Show Hint button</span><input type="checkbox" id="setShowHint"></div>
+    <div class="row">
+      <span>Auto-play all copies (except A, 2, 10)</span>
+      <input type="checkbox" id="setAutoAll">
+    </div>
 
-    <!-- Card back UI (no dropdown) -->
+    <!-- ===== Appearance ===== -->
+    <h4 class="settings-section">Appearance</h4>
+
+    <!-- Felt (table background) -->
+    <div class="section">
+      <div class="row" style="align-items:center; gap:10px">
+        <span><b>Table color</b></span>
+        <div class="felt-swatches" id="feltSwatches">
+          <button class="felt-swatch" data-color="#0a5a3c" title="Green"></button>
+          <button class="felt-swatch" data-color="#8c1e1e" title="Red"></button>
+          <button class="felt-swatch" data-color="#1e4e8c" title="Blue"></button>
+        </div>
+        <button id="feltMore" class="primary" style="margin-left:auto">More colors</button>
+      </div>
+      <div class="row" id="feltPickerRow" style="display:none; gap:10px">
+        <input type="color" id="feltColor" value="#0a5a3c">
+        <span id="feltHexLabel" style="opacity:.9;font-size:12px">#0A5A3C</span>
+      </div>
+    </div>
+
+    <!-- Card face theme -->
+    <div class="row">
+      <span>Card face theme</span>
+      <select id="setCardFace">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+
+    <!-- Card back UI (kept from your version) -->
     <div class="section" id="cardBackUI">
       <div class="row" style="align-items:center; gap:10px">
         <span><b>Card back</b></span>
@@ -134,5 +169,21 @@
       <div class="actions"><button id="hintClose" class="primary">✕</button></div>
     </div>
   </div>
+
+  <!-- Stats modal -->
+<div class="modal" id="statsModal">
+  <div class="backdrop"></div>
+  <div class="content">
+    <h3>Match Stats</h3>
+    <div class="row" style="gap:8px">
+      <span>Player</span>
+      <select id="statsPlayer"></select>
+    </div>
+    <div id="statsChart" style="margin-top:8px"></div>
+    <div class="actions">
+      <button id="statsClose" class="primary">Close</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

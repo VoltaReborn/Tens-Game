@@ -250,3 +250,44 @@ button, .card.playable{ touch-action: manipulation }
     display: flex; /* same as your .row */
   }
 }
+
+/* Section headings inside Settings */
+.settings-section{
+  margin:10px 0 4px;
+  font-size:13px;
+  letter-spacing:.3px;
+  opacity:.9;
+  text-transform:uppercase;
+}
+
+/* Felt swatches */
+.felt-swatches{ display:flex; gap:8px; align-items:center }
+.felt-swatch{
+  width:26px; height:26px; border-radius:6px;
+  border:1px solid rgba(255,255,255,.25);
+  cursor:pointer; background:#0a5a3c;
+}
+.felt-swatch[data-color="#0a5a3c"]{ background:#0a5a3c } /* green */
+.felt-swatch[data-color="#8c1e1e"]{ background:#8c1e1e } /* red */
+.felt-swatch[data-color="#1e4e8c"]{ background:#1e4e8c } /* blue */
+
+/* Card face themes */
+[data-cardface="dark"] .card{
+  background: linear-gradient(180deg,#2a2a2a,#171717);
+  color:#eee;
+  border-color:#3a3a3a;
+}
+[data-cardface="dark"] .card.red{ color:#ff7a7a } /* hearts/diamonds pop on dark */
+[data-cardface="dark"] .card.small{
+  background: linear-gradient(180deg,#272727,#151515);
+}
+
+/* Keep the mobile-only rule with higher specificity (you already added this chunk) */
+.modal .row.mobile-only{ display:none; }
+@media (max-width: 768px){
+  .modal .row.mobile-only{ display:flex; }
+}
+
+#statsChart svg{ width:100%; height:220px; display:block; }
+#statsChart .axis text{ font-size:11px; fill:#ddd }
+#statsChart .axis line, #statsChart .axis path{ stroke:#999; opacity:.4 }
