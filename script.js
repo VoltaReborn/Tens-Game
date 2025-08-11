@@ -414,52 +414,135 @@ function aiLog(p,msg){ log(p.name+' ['+displayDiffLabel()+']: '+msg); }
 function pointsOf(cards){ return cards.reduce(function(acc,c){return acc+scoringValue(c.r);},0); }
 function maxUnloadGroupPoints(p){ const fu=faceUpCards(p), hand=p.hand; const groups={}; [...fu,...hand].forEach(function(c){ if(!c) return; if(c.r==='10'||c.r==='A') return; (groups[c.r]||(groups[c.r]=[])).push(c); }); let best=0; Object.values(groups).forEach(function(g){ best=Math.max(best, pointsOf(g)); }); return best; }
 function pilePointsAdjustedForGuaranteedClear(p){ const counts=pileCounts(); let pts=pointsOf(state.pile); for(const r in counts){ const have = countHandRank(p,r)+countFaceUpRank(p,r); if(r!=='A' && counts[r]+have>=4){ const rPts = counts[r]*scoringValue(r); pts -= rPts; } } return Math.max(0,pts); }
-async function aiTakeTurn(p,chain){ if(chain===undefined) chain=false; if(!state.roundActive) { endOrNext(); return; } await sleep(chain?180:420); const fu=faceUpCards(p); const diff=getAIDifficulty(); const pileLen=state.pile.length;
-  if((diff==='hard'||diff==='expert') && state.currentValue!==null){
-    const counts=pileCounts(); const distinct=Object.keys(counts).length; const onlyAces = distinct===1 && counts['A']>0; const single3 = distinct===1 && counts['3']===1; const few2s = distinct===1 && counts['2']>=1 && counts['2']<=3;
-    if(onlyAces){
-      const higherFU=fu.map(function(c){return c.r;}).filter(function(r,i,a){return a.indexOf(r)===i && RVAL[r]>1;}); if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1);
-      const idx1=p.slots.findIndex(function(s){return s && !s.up && s.down;}); if(idx1>=0) return tryFlipFaceDownSlot(idx1);
-      const higherH=[...new Set(p.hand.map(function(c){return c&&c.r;}))].filter(function(r){return r && RVAL[r]>1;}); if(higherH.length) return playCards(p,higherH[0],'hand',1);
-    }
-    if(single3 || few2s){ const higherFU2=fu.map(function(c){return c.r;}).filter(function(r,i,a){return a.indexOf(r)===i && RVAL[r]>state.currentValue;}); if(higherFU2.length) return playCards(p,higherFU2[0],'faceUp',1); const higherH2=[...new Set(p.hand.map(function(c){return c&&c.r;}))].filter(function(r){return r && RVAL[r]>state.currentValue;}); if(higherH2.length) return playCards(p,higherH2[0],'hand',1); const j=p.slots.findIndex(function(s){return s && !s.up && s.down;}); if(j>=0) return tryFlipFaceDownSlot(j); }
-    if(diff==='expert'){
-      const counts3=pileCounts(); const distinct3=Object.keys(counts3).length; if(distinct3<3){ const pilePts = pilePointsAdjustedForGuaranteedClear(p); const unload = maxUnloadGroupPoints(p); if(unload>pilePts){
-          const higherFU3=fu.map(function(c){return c.r;}).filter(function(r,i,a){return a.indexOf(r)===i && RVAL[r]>state.currentValue;}); if(higherFU3.length) return playCards(p,higherFU3[0],'faceUp',1); const higherH3=[...new Set(p.hand.map(function(c){return c&&c.r;}))].filter(function(r){return r && RVAL[r]>state.currentValue;}); if(higherH3.length) return playCards(p,higherH3[0],'hand',1); const k=p.slots.findIndex(function(s){return s && !s.up && s.down;}); if(k>=0) return tryFlipFaceDownSlot(k); }
+async function aiTakeTurn(p, chain){
+  if(chain === undefined) chain = false;
+
+  try{
+    if(!state.roundActive) { endOrNext(); return; }
+
+    await sleep(chain ? 180 : 420);
+
+    const fu = faceUpCards(p);
+    const diff = getAIDifficulty();
+    const pileLen = state.pile.length;
+
+    // ===== “hard/expert” early-pressure branches (unchanged logic) =====
+    if((diff==='hard'||diff==='expert') && state.currentValue!==null){
+      const counts=pileCounts(); const distinct=Object.keys(counts).length;
+      const onlyAces = distinct===1 && counts['A']>0;
+      const single3 = distinct===1 && counts['3']===1;
+      const few2s = distinct===1 && counts['2']>=1 && counts['2']<=3;
+
+      if(onlyAces){
+        const higherFU = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r]>1);
+        if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
+
+        const idx1 = p.slots.findIndex(s => s && !s.up && s.down); // ✅ use p.slots
+        if(idx1>=0) return tryFlipFaceDownSlot(idx1);
+
+        const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r]>1);
+        if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
+      }
+
+      if(single3 || few2s){
+        const higherFU2 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
+        if(higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
+
+        const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
+        if(higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
+
+        const j = p.slots.findIndex(s => s && !s.up && s.down); // ✅ use p.slots
+        if(j>=0) return tryFlipFaceDownSlot(j);
+      }
+
+      if(diff==='expert'){
+        const counts3=pileCounts(); const distinct3=Object.keys(counts3).length;
+        if(distinct3<3){
+          const pilePts = pilePointsAdjustedForGuaranteedClear(p);
+          const unload  = maxUnloadGroupPoints(p);
+          if(unload > pilePts){
+            const higherFU3 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
+            if(higherFU3.length) return playCards(p, higherFU3[0], 'faceUp', 1);
+
+            const higherH3 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
+            if(higherH3.length) return playCards(p, higherH3[0], 'hand', 1);
+
+            const k = p.slots.findIndex(s => s && !s.up && s.down); // ✅ use p.slots
+            if(k>=0) return tryFlipFaceDownSlot(k);
+          }
+        }
       }
     }
-  }
-  if(diff==='lose'){
-    if(state.currentValue!==null){ const higherFU4=fu.map(function(c){return c.r;}).filter(function(r,i,a){return a.indexOf(r)===i && RVAL[r]>state.currentValue;}); if(higherFU4.length) return playCards(p,higherFU4[0],'faceUp',1); const higherH4=[...new Set(p.hand.map(function(c){return c&&c.r;}))].filter(function(r){return r && RVAL[r]>state.currentValue;}); if(higherH4.length) return playCards(p,higherH4[0],'hand',1); }
-    const iLose=p.slots.findIndex(function(s){return s && !s.up && s.down;}); if(iLose>=0) return tryFlipFaceDownSlot(iLose);
-    const fuAvail=fu.map(function(c){return c.r;}).filter(function(r,i,arr){ return arr.indexOf(r)===i && canPlayRank(r); }); if(fuAvail.length){ fuAvail.sort(function(a,b){return RVAL[a]-RVAL[b];}); return playCards(p,fuAvail[0],'faceUp',1); }
-    const ranks=[...new Set(p.hand.map(function(c){return c&&c.r;}))].filter(function(r){return r && canPlayRank(r);}); if(ranks.length){ ranks.sort(function(a,b){return RVAL[a]-RVAL[b];}); return playCards(p,ranks[0],'hand',1); }
-  }
 
-  const ranksAvail=new Set(); p.hand.forEach(function(c){ if(c&&c.r) ranksAvail.add(c.r); }); fu.forEach(function(c){ ranksAvail.add(c.r); });
-  let legal=[...ranksAvail].filter(function(r){return canPlayRank(r);}); const nonAce=legal.filter(function(r){return r!=='A';}); if(nonAce.length) legal=nonAce;
+    // ===== General play logic (unchanged behavior) =====
+    const ranksAvail=new Set(); p.hand.forEach(c=>{ if(c&&c.r) ranksAvail.add(c.r); }); fu.forEach(c=>ranksAvail.add(c.r));
+    let legal=[...ranksAvail].filter(r=>canPlayRank(r)); const nonAce=legal.filter(r=>r!=='A'); if(nonAce.length) legal=nonAce;
 
-  const oppClose= state.players.some(function(pl){ return pl.id!==p.id && rem(pl) <= 6; });
-  const early=everyoneEarly();
-  const canClearNow=function(r){ const qty=p.hand.filter(function(c){return c&&c.r===r;}).length + fu.filter(function(c){return c.r===r;}).length + (state.currentValue!==null && RANKS[state.currentValue-1]===r ? state.currentCount : 0); return qty>=4; };
-  const considerClear=function(r){ if(diff==='hard'||diff==='expert'){ if(oppClose && !early){ const unloadPts = maxUnloadGroupPoints(p); if(unloadPts < 15) return false; } } return true; };
+    const oppClose= state.players.some(pl=> pl.id!==p.id && rem(pl) <= 6);
+    const early=everyoneEarly();
 
-  for(const r of legal){ if(r==='10') continue; if(canClearNow(r) && considerClear(r)){ const cntFU=fu.filter(function(c){return c.r===r;}).length; if(cntFU) return playCards(p,r,'faceUp',cntFU); const cntH=p.hand.filter(function(c){return c&&c.r===r;}).length; if(cntH) return playCards(p,r,'hand',cntH); } }
+    const canClearNow=function(r){
+      const qty=p.hand.filter(c=>c&&c.r===r).length + fu.filter(c=>c.r===r).length +
+        ((state.currentValue!==null && RANKS[state.currentValue-1]===r)? state.currentCount : 0);
+      return qty>=4;
+    };
+    const considerClear=function(r){
+      if(diff==='hard'||diff==='expert'){
+        if(oppClose && !early){
+          const unloadPts = maxUnloadGroupPoints(p);
+          if(unloadPts < 15) return false;
+        }
+      }
+      return true;
+    };
 
-  const hasTenHand=p.hand.some(function(c){return c&&c.r==='10';}); const hasTenFU=fu.some(function(c){return c.r==='10';});
-  if(hasTenHand||hasTenFU){ let use10=false; if(diff==='easy') use10 = oppClose || pileLen>6 || Math.random()<0.6; else if(diff==='medium') use10 = oppClose || pileLen>=10 || early; else {
-      const unloadPts = maxUnloadGroupPoints(p);
-      use10 = (!state.currentValue || pileLen>=12 || early) && (oppClose ? unloadPts>=15 : true);
+    for(const r of legal){ if(r==='10') continue; if(canClearNow(r) && considerClear(r)){
+      const cntFU=fu.filter(c=>c.r===r).length;
+      if(cntFU) return playCards(p,r,'faceUp',cntFU);
+      const cntH=p.hand.filter(c=>c&&c.r===r).length;
+      if(cntH) return playCards(p,r,'hand',cntH);
+    }}
+
+    const hasTenHand=p.hand.some(c=>c&&c.r==='10'); const hasTenFU=fu.some(c=>c.r==='10');
+    if(hasTenHand||hasTenFU){
+      let use10=false;
+      if(diff==='easy') use10 = oppClose || pileLen>6 || Math.random()<0.6;
+      else if(diff==='medium') use10 = oppClose || pileLen>=10 || early;
+      else {
+        const unloadPts = maxUnloadGroupPoints(p);
+        use10 = (!state.currentValue || pileLen>=12 || early) && (oppClose ? unloadPts>=15 : true);
+      }
+      if(use10){ if(hasTenHand) return playCards(p,'10','hand',1); else return playCards(p,'10','faceUp',1); }
     }
-    if(use10){ if(hasTenHand) return playCards(p,'10','hand',1); else return playCards(p,'10','faceUp',1); }
-  }
 
-  const legalFU=fu.map(function(c){return c.r;}).filter(function(r,i,arr){ return arr.indexOf(r)===i && canPlayRank(r) && r!=='A'; }); if(legalFU.length){ legalFU.sort(function(a,b){return RVAL[b]-RVAL[a];}); const r1=legalFU[0]; const cnt=fu.filter(function(c){return c.r===r1;}).length; return playCards(p,r1,'faceUp',cnt); }
-  legal.sort(function(a,b){return RVAL[b]-RVAL[a];}); for(const r2 of legal){ if(r2==='A') continue; const cntH2=p.hand.filter(function(c){return c&&c.r===r2;}).length; if(cntH2){ return playCards(p,r2,'hand',cntH2); } }
-  if(ranksAvail.has('A') && canPlayRank('A')){ if(countFaceUpRank(p,'A')>0) return playCards(p,'A','faceUp',1); if(p.hand.some(function(c){return c&&c.r==='A';})) return playCards(p,'A','hand',1); }
-  if(state.currentValue!==null){ const higherFU=fu.map(function(c){return c.r;}).filter(function(r,i,a){return a.indexOf(r)===i && RVAL[r]>state.currentValue;}); if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1); const higherH=[...new Set(p.hand.map(function(c){return c&&c.r;}))].filter(function(r){return r && RVAL[r]>state.currentValue;}); if(higherH.length) return playCards(p,higherH[0],'hand',1); }
-  const i=state.players[state.turn].slots.findIndex(function(s){return s && !s.up && s.down;}); if(i>=0){ return tryFlipFaceDownSlot(i); }
-  endOrNext(); }
+    const legalFU=[...new Set(fu.map(c=>c.r))].filter(r=>canPlayRank(r) && r!=='A');
+    if(legalFU.length){ legalFU.sort((a,b)=>RVAL[b]-RVAL[a]); const r1=legalFU[0]; const cnt=fu.filter(c=>c.r===r1).length; return playCards(p,r1,'faceUp',cnt); }
+    legal.sort((a,b)=>RVAL[b]-RVAL[a]);
+    for(const r2 of legal){ if(r2==='A') continue; const cntH2=p.hand.filter(c=>c&&c.r===r2).length; if(cntH2){ return playCards(p,r2,'hand',cntH2); } }
+
+    if(ranksAvail.has('A') && canPlayRank('A')){
+      if(fu.some(c=>c.r==='A')) return playCards(p,'A','faceUp',1);
+      if(p.hand.some(c=>c&&c.r==='A')) return playCards(p,'A','hand',1);
+    }
+
+    if(state.currentValue!==null){
+      const higherFU=[...new Set(fu.map(c=>c.r))].filter(r=>RVAL[r]>state.currentValue);
+      if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1);
+      const higherH=[...new Set(p.hand.map(c=>c&&c.r))].filter(r=>r && RVAL[r]>state.currentValue);
+      if(higherH.length) return playCards(p,higherH[0],'hand',1);
+    }
+
+    // ✅ If nothing else, *flip on this player*, using p.slots (not state.players[state.turn])
+    const i = p.slots.findIndex(s => s && !s.up && s.down);
+    if(i>=0){ return tryFlipFaceDownSlot(i); }
+
+    endOrNext();
+  }catch(err){
+    log('AI turn error for ' + p.name + ': ' + (err && err.message ? err.message : String(err)));
+    // Try to keep the game flowing
+    endOrNext();
+  }
+}
 
 // ===== Scoring / Rounds =====
 async function scoreRound(finisher){
