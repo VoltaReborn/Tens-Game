@@ -78,63 +78,67 @@
   <div class="content">
     <h3>Settings</h3>
 
-    <!-- ===== Gameplay ===== -->
-    <h4 class="settings-section">Gameplay</h4>
-    <div class="row"><span>Pause before board clear</span><input type="checkbox" id="setPauseBefore"></div>
-    <div class="row"><span>Warn when an <b>AI</b> player has ≤ <input id="setWarnThresh" type="number" min="1" max="30" value="5" style="width:60px"> cards</span><input type="checkbox" id="setWarnOn"></div>
-    <div class="row"><span>Show suits</span><input type="checkbox" id="setSuits"></div>
-    <div class="row mobile-only"><span>Tap mini pile to hide/show</span><input type="checkbox" id="setMiniTap"></div>
-    <div class="row"><span>Show Hint button</span><input type="checkbox" id="setShowHint"></div>
+    <!-- Gameplay -->
+    <div class="sectionTitle">Gameplay</div>
+    <div class="row"><span>Pause before board clear</span><label class="switch"><input type="checkbox" id="setPauseBefore"><i></i></label></div>
     <div class="row">
-      <span>Auto-play all copies (except A, 2, 10)</span>
-      <input type="checkbox" id="setAutoAll">
+      <span>Warn when an <b>AI</b> player has ≤ <input id="setWarnThresh" type="number" min="1" max="30" value="5" class="themed-input-narrow"> cards</span>
+      <label class="switch"><input type="checkbox" id="setWarnOn"><i></i></label>
+    </div>
+    <div class="row"><span>Show suits</span><label class="switch"><input type="checkbox" id="setSuits"><i></i></label></div>
+    <div class="row mobile-only"><span>Tap mini pile to hide/show</span><label class="switch"><input type="checkbox" id="setMiniTap"><i></i></label></div>
+    <div class="row"><span>Show Hint button</span><label class="switch"><input type="checkbox" id="setShowHint"><i></i></label></div>
+
+    <!-- Appearance -->
+    <div class="sectionTitle" style="margin-top:10px">Appearance</div>
+
+    <!-- Table color row -->
+    <div class="row" id="tableColorRow">
+      <span>Table color</span>
+      <div class="color-chip-row" id="tablePresetChips"></div>
+      <button id="tableColorAdd" class="chip-plus" title="Add color">+</button>
+      <button id="tableColorEdit" class="link-btn" style="margin-left:auto">Edit</button>
+      <input type="color" id="tableColorPicker" style="display:none">
     </div>
 
-    <!-- ===== Appearance ===== -->
-    <h4 class="settings-section">Appearance</h4>
-
-    <!-- Felt (table background) -->
-    <div class="section">
-      <div class="row" style="align-items:center; gap:10px">
-        <span><b>Table color</b></span>
-        <div class="felt-swatches" id="feltSwatches">
-          <button class="felt-swatch" data-color="#0a5a3c" title="Green"></button>
-          <button class="felt-swatch" data-color="#8c1e1e" title="Red"></button>
-          <button class="felt-swatch" data-color="#1e4e8c" title="Blue"></button>
-        </div>
-        <button id="feltMore" class="primary" style="margin-left:auto">More colors</button>
-      </div>
-      <div class="row" id="feltPickerRow" style="display:none; gap:10px">
-        <input type="color" id="feltColor" value="#0a5a3c">
-        <span id="feltHexLabel" style="opacity:.9;font-size:12px">#0A5A3C</span>
-      </div>
-    </div>
-
-    <!-- Card face theme -->
-    <div class="row">
-      <span>Card face theme</span>
-      <select id="setCardFace">
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </div>
-
-    <!-- Card back UI (kept from your version) -->
-    <div class="section" id="cardBackUI">
+    <!-- Card backs -->
+    <div class="section" id="cardBackUI" data-expanded="false">
       <div class="row" style="align-items:center; gap:10px">
         <span><b>Card back</b></span>
-        <div id="cardBackPreview" class="cardback-preview">
+        <div id="cardBackPreview" class="cardback-preview toggler" title="Click to change">
           <div class="cardback-thumb" id="cardBackPreviewThumb"></div>
-          <span class="lbl" id="cardBackPreviewLabel">—</span>
+          <span class="lbl" id="cardBackPreviewLabel"></span>
         </div>
-        <button id="cardBackToggle" class="primary" style="margin-left:auto">Change</button>
       </div>
-      <div class="cardback-grid" id="cardBackGallery" style="display:none"></div>
+
+      <!-- Collapsible content -->
+      <div id="cardBackPanel" style="display:none; margin-top:8px">
+        <!-- Built-ins -->
+        <div class="cardback-grid" id="cardBackGallery"></div>
+
+        <!-- Custom creators -->
+        <div class="row" style="margin-top:8px; gap:8px">
+          <span style="opacity:.9">Custom</span>
+          <button id="addSolidBack" class="themed-btn">Add solid…</button>
+          <button id="addMixBack" class="themed-btn">Add mix…</button>
+          <input type="color" id="cardBackSolidPicker" style="display:none">
+          <input type="color" id="cardBackMixA" style="display:none">
+          <input type="color" id="cardBackMixB" style="display:none">
+        </div>
+
+        <!-- Favorites (hidden when empty) -->
+        <div class="section" id="cardBackFavRow" style="display:none; margin-top:8px">
+          <div class="row" style="align-items:center; gap:10px">
+            <span>Saved card backs</span>
+            <button id="cardBackEdit" class="link-btn" style="margin-left:auto">Edit</button>
+          </div>
+          <div class="cardback-grid" id="cardBackFavs"></div>
+        </div>
+      </div>
     </div>
 
     <div class="actions">
-      <button id="setCancel">Cancel</button>
-      <button class="primary" id="setSave">Save</button>
+      <button id="setClose" class="primary themed-btn">Close</button>
     </div>
   </div>
 </div>

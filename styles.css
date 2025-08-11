@@ -1,33 +1,109 @@
+/* =========================================================
+   Tens — styles.css (cleaned + consolidated)
+   Notes:
+   - Visuals preserved
+   - Toggle ON color now derived from --felt (no more fixed yellow)
+   - Removed duplicates / dead rules
+   ========================================================= */
+
+/* Dev helper */
 #runTests.dev{ display:inline-block !important; }
+
+/* ---------- THEME VARIABLES ---------- */
 :root{
+  /* Felt/table theme */
   --felt:#0a5a3c;
   --felt-dark:#084a33;
+
+  /* Brand accents / text */
   --gold:#f0c36a;
   --ivory:#f9f6ee;
   --ink:#1b1b1b;
   --accent:#e7b553;
 
+  /* Derived chrome colors (scorebar/modal borders, etc.) */
+  --chrome-bg: rgba(10,90,60,.92);
+  --chrome-border: rgba(255,255,255,.15);
+
+  /* Controls theme (auto-derive from felt) */
+  --ui-bg: color-mix(in oklab, var(--felt-dark) 85%, black);
+  --ui-border: color-mix(in oklab, var(--felt-dark) 70%, white);
+  --ui-bg-hover: color-mix(in oklab, var(--felt-dark) 75%, black);
+
+  /* Toggle ON color follows felt */
+  --toggle-on: color-mix(in oklab, var(--felt) 55%, white);
+
   /* Single knob for mobile spacing (your table) */
   --me-mobile-table-space: 20px;
 }
+
+/* ---------- BASE LAYOUT ---------- */
 html,body{height:100%}
-body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; background: radial-gradient(1000px 600px at 50% 20%, var(--felt), var(--felt-dark)); color: var(--ivory); overflow-x:hidden; }
-.table{max-width: 1200px; margin: 0 auto; padding: 16px 16px 160px; position: relative;}
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  background: radial-gradient(1000px 600px at 50% 20%, var(--felt), var(--felt-dark));
+  color: var(--ivory);
+  overflow-x:hidden;
+}
+*{ -webkit-tap-highlight-color: rgba(0,0,0,0) }
+
+.table{max-width:1200px; margin:0 auto; padding:16px 16px 160px; position:relative;}
 h1{font-weight:800; letter-spacing:1px; margin:8px 0 0;}
 .sub{opacity:.85; margin:0 0 16px 0}
+
+/* Controls (selects + buttons theme to table color) */
 .controls{display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin:8px 0 16px 0;}
-select, button{background:#113f2d; color:var(--ivory); border:1px solid #205f45; border-radius:10px; padding:10px 12px; font-size:14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05)}
-button.primary{background:linear-gradient(180deg,#facb76,#e7b553); color:#2d1c00; border-color:#e6b14c; font-weight:700}
+select, button{
+  background: var(--ui-bg);
+  color: var(--ivory);
+  border:1px solid var(--ui-border);
+  border-radius:10px;
+  padding:10px 12px;
+  font-size:14px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+button.primary{
+  background:linear-gradient(180deg,#facb76,#e7b553);
+  color:#2d1c00;
+  border-color:#e6b14c;
+  font-weight:700
+}
 button:disabled{opacity:.5; cursor:not-allowed}
+button, .card.playable{ touch-action: manipulation }
+
+/* ---------- BOARD / PANELS ---------- */
 .board{display:grid; grid-template-columns: 1fr 460px 1fr; gap:16px; align-items:start}
 .panel{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:12px}
 .pile{background: rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:14px; min-height:140px; backdrop-filter: blur(4px)}
 .pile h3,.section h3{margin:0 0 8px 0; font-size:14px; opacity:.9}
 .stack{display:flex; flex-wrap:wrap; gap:6px}
-.card{width:48px; height:68px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:18px; position:relative; background:linear-gradient(180deg,#fff,#efefef); color:#111; border:1px solid #d8d8d8; box-shadow:0 1px 0 rgba(0,0,0,.3); transition: transform .15s ease, box-shadow .15s ease, opacity .2s ease; user-select:none}
+.section{ margin-bottom:14px }
+.lane{display:flex; flex-direction:column; gap:8px}
+.playerArea{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:12px}
+.playerHeader{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px}
+.badge{background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); padding:4px 8px; border-radius:999px; font-size:12px}
+.me .playerHeader{color: var(--accent)}
+.turnGlow{box-shadow:0 0 0 3px rgba(240,195,106,.4), 0 0 0 8px rgba(240,195,106,.18)}
+.log{max-height:160px; overflow:auto; font-size:13px; background: rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:10px}
+
+/* ---------- CARDS ---------- */
+.card{
+  width:48px; height:68px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:18px; position:relative;
+  background:linear-gradient(180deg,#fff,#efefef);
+  color:#111; border:1px solid #d8d8d8;
+  box-shadow:0 1px 0 rgba(0,0,0,.3);
+  transition: transform .15s ease, box-shadow .15s ease, opacity .2s ease;
+  user-select:none
+}
 .card.red{color:#b02020}
-/* Card backs options (controlled by body[data-cardback]) */
-/* Card backs options (controlled by body[data-cardback]) */
+.card.small{width:36px; height:52px; font-size:14px; border-radius:8px}
+.card.playable{outline:3px solid var(--accent); cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.card.playable:hover{transform:translateY(-2px)}
+
+/* Card backs (by body[data-cardback]) */
 [data-cardback="blueflame"] .card.faceDown{
   background:
     radial-gradient(120px 90px at 50% 110%, rgba(255,255,255,.15), transparent 60%),
@@ -45,129 +121,168 @@ button:disabled{opacity:.5; cursor:not-allowed}
   background: linear-gradient(180deg,#1e4e8c,#153a68);
   color:transparent; border-color:#0e3a74; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12)
 }
-
-/* New solid options */
+/* Solid */
 [data-cardback="solid-blue"]  .card.faceDown{ background: linear-gradient(180deg,#1e4e8c,#153a68); color:transparent; border-color:#0e3a74; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
 [data-cardback="solid-red"]   .card.faceDown{ background: linear-gradient(180deg,#b11f1f,#7e1515); color:transparent; border-color:#6e0f0f; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
 [data-cardback="solid-black"] .card.faceDown{ background: linear-gradient(180deg,#222,#111);     color:transparent; border-color:#000;     box-shadow:0 1px 0 rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.10) }
 [data-cardback="solid-green"] .card.faceDown{ background: linear-gradient(180deg,#156f4a,#0f5437); color:transparent; border-color:#0a3b28; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
-
-/* New mix options (simple swirls) */
+/* Mixes */
 [data-cardback="mix-red-blue"]    .card.faceDown{ background: conic-gradient(from 0deg at 50% 50%, #b11f1f, #1e4e8c, #b11f1f);    color:transparent; border-color:#0e3a74; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
 [data-cardback="mix-blue-black"]  .card.faceDown{ background: conic-gradient(from 0deg at 50% 50%, #1e4e8c, #111, #1e4e8c);       color:transparent; border-color:#0e3a74; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
 [data-cardback="mix-red-black"]   .card.faceDown{ background: conic-gradient(from 0deg at 50% 50%, #b11f1f, #111, #b11f1f);       color:transparent; border-color:#6e0f0f; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
 [data-cardback="mix-red-green"]   .card.faceDown{ background: conic-gradient(from 0deg at 50% 50%, #b11f1f, #156f4a, #b11f1f);    color:transparent; border-color:#0a3b28; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
 [data-cardback="mix-green-black"] .card.faceDown{ background: conic-gradient(from 0deg at 50% 50%, #156f4a, #111, #156f4a);       color:transparent; border-color:#0a3b28; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
 [data-cardback="mix-green-blue"]  .card.faceDown{ background: conic-gradient(from 0deg at 50% 50%, #156f4a, #1e4e8c, #156f4a);    color:transparent; border-color:#0a3b28; box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12) }
+/* Custom (dynamic via --cardback-custom-bg) */
+[data-cardback="custom"] .card.faceDown{
+  background: var(--cardback-custom-bg);
+  color:transparent;
+  border-color: rgba(0,0,0,.5);
+  box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.12);
+}
 
-.card.small{width:36px; height:52px; font-size:14px; border-radius:8px}
-.card.playable{outline:3px solid var(--accent); cursor:pointer; box-shadow:0 6px 20px rgba(0,0,0,.35)}
-.card.playable:hover{transform:translateY(-2px)}
-.lane{display:flex; flex-direction:column; gap:8px}
-.playerArea{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:12px}
-.playerHeader{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px}
-.badge{background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); padding:4px 8px; border-radius:999px; font-size:12px}
-.me .playerHeader{color: var(--accent)}
-.turnGlow{box-shadow:0 0 0 3px rgba(240,195,106,.4), 0 0 0 8px rgba(240,195,106,.18)}
-.log{max-height:160px; overflow:auto; font-size:13px; background: rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:10px}
-
-/* Collapsible scorebar */
-.scorebar{position:fixed; left:0; right:0; bottom:0; background: rgba(10,90,60,.92); border-top:1px solid rgba(255,255,255,.15); display:flex; gap:10px; padding:8px 10px; align-items:center; backdrop-filter: blur(6px)}
+/* ---------- SCOREBAR ---------- */
+.scorebar{
+  position:fixed; left:0; right:0; bottom:0;
+  background: var(--chrome-bg);
+  border-top:1px solid var(--chrome-border);
+  display:flex; gap:10px; padding:8px 10px; align-items:center; backdrop-filter: blur(6px)
+}
 .scorebar .scores{display:flex; gap:10px; font-size:12px; overflow-x:auto; white-space:nowrap; flex:1}
 .scorebar .slot{background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.2); padding:4px 8px; border-radius:10px}
 #scoreToggle{ background: rgba(0,0,0,.25); border:1px solid rgba(255,255,255,.2); border-radius:8px; padding:4px 8px; font-size:12px }
 .scorebar.collapsed #status{ display:none }
 @media (min-width:901px){ .scorebar.collapsed #status{ display:block } }
 
+/* ---------- TOAST ---------- */
 .toast{position:fixed; top:16px; right:16px; background:#1a1a1a; color:#fff; padding:10px 12px; border-radius:10px; opacity:0; transform: translateY(-6px); transition: all .25s ease}
 .toast.show{opacity:1; transform: translateY(0)}
-/* Picker */
-.picker{position:fixed; left:50%; transform:translateX(-50%); bottom:68px; background:#103a2a; border:1px solid #1d5e45; border-radius:14px; padding:12px; display:none; gap:10px; align-items:center; box-shadow:0 8px 30px rgba(0,0,0,.35); z-index:1000; max-width:94vw; flex-wrap:wrap}
+
+/* ---------- PICKER (small inline modal used in play flows) ---------- */
+.picker{
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:68px; background:#103a2a; border:1px solid #1d5e45; border-radius:14px;
+  padding:12px; display:none; gap:10px; align-items:center;
+  box-shadow:0 8px 30px rgba(0,0,0,.35); z-index:1000; max-width:94vw; flex-wrap:wrap
+}
 .picker b{margin-right:8px}
 .picker button{background:#184b37}
 .picker .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
 .picker .choices{display:flex; gap:6px; flex-wrap:wrap; max-width:100%}
 
-/* Give more air between table and hand, and show down card peek on mobile */
-.section{ margin-bottom:14px }
-
-@media (max-width: 900px){ .table{padding:12px 12px 200px} .board{grid-template-columns: 1fr; gap:16px} .controls{gap:8px} select,button{font-size:16px; padding:12px 14px; border-radius:12px} .panel,.pile{border-radius:14px} .playerHeader .badge{font-size:12px} .card{width:56px; height:80px; font-size:20px; border-radius:12px} .card.small{width:44px; height:64px; font-size:16px} .stack{gap:8px} .scorebar{padding:6px 8px} .picker{left:0; right:0; transform:none; margin:0 8px; bottom:84px; border-radius:16px; padding:12px} .picker button{padding:10px 12px; font-size:16px; border-radius:10px} #aiTop .playerArea{margin-bottom:12px} }
-@media (max-width: 600px){ h1{font-size:22px} .sub{font-size:14px} .controls{flex-direction:column; align-items:stretch} .controls label{display:flex; justify-content:space-between; align-items:center} .pile h3,.section h3{font-size:13px} .playerHeader{flex-direction:column; align-items:flex-start; gap:4px} .card{width:64px; height:92px; font-size:22px} .card.small{width:48px; height:72px; font-size:18px} .stack{gap:10px} #aiTop .playerArea{padding:8px} .scorebar{gap:8px} .scores{font-size:12px} .picker{bottom:92px} }
-*{ -webkit-tap-highlight-color: rgba(0,0,0,0) }
-button, .card.playable{ touch-action: manipulation }
-/* Mini pile */
-#miniPile{ position: fixed; right: 10px; top: 10px; z-index: 50; display:none; width: 170px; max-height: 50vh; overflow:auto; background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.18); border-radius:14px; padding:8px; backdrop-filter: blur(6px); box-shadow:0 6px 24px rgba(0,0,0,.35) }
-#miniPile h4{ margin:0 0 4px 0; font-size:12px; opacity:.9 }
-#miniInfo{ font-size:12px; opacity:.9; margin-bottom:6px }
-#miniMore{ font-size:11px; opacity:.9; margin-top:4px; text-align:right }
-#miniStack .card{ transform: scale(.9) }
-.miniAnchor{ position:fixed; width:44px; height:44px; border-radius:22px; background: rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.22); color:#fff; display:none; align-items:center; justify-content:center; z-index:49; font-size:16px; }
-@media (min-width:901px){ #miniPile,.miniAnchor{ display:none !important } }
-/* Settings modal */
-#settingsBtn{ margin-left:auto }
+/* ---------- MODALS ---------- */
 .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:1200; }
 .modal .backdrop{ position:absolute; inset:0; background: rgba(0,0,0,.5); }
-.modal .content{ position:relative; background:#113f2d; border:1px solid #1d5e45; border-radius:14px; padding:14px; max-width: 560px; width: 92vw; color:var(--ivory); box-shadow:0 10px 40px rgba(0,0,0,.45) }
+.modal .content{
+  position:relative;
+  background: color-mix(in srgb, var(--felt) 85%, black); /* themed */
+  border:1px solid var(--chrome-border);
+  border-radius:14px; padding:14px; max-width:560px; width:92vw; color:var(--ivory);
+  box-shadow:0 10px 40px rgba(0,0,0,.45)
+}
 .modal h3{ margin:0 0 8px 0 }
 .modal .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 0 }
 .modal .actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:10px }
+
 /* Round summary modal */
 #roundModal .content{ max-width:720px }
 .accordion .item{ border-top:1px solid rgba(255,255,255,.12); padding:8px 0 }
 .accordion .item h4{ margin:0; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer }
 .badgeChip{ background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); padding:2px 6px; border-radius:999px; font-size:11px }
-/* Card back gallery in Settings */
-.cardback-grid{
-  display:grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap:8px; margin-top:8px;
+
+/* ---------- MINI PILE ---------- */
+#miniPile{
+  position: fixed; right:10px; top:10px; z-index:50; display:none;
+  width:170px; max-height:50vh; overflow:auto;
+  background: rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.18);
+  border-radius:14px; padding:8px; backdrop-filter: blur(6px); box-shadow:0 6px 24px rgba(0,0,0,.35)
 }
-.cardback-option{
-  appearance:none; background:rgba(0,0,0,.18);
-  border:1px solid rgba(255,255,255,.18);
-  border-radius:12px; padding:8px;
-  display:flex; flex-direction:column; align-items:center; gap:6px;
-  cursor:pointer;
+#miniPile h4{ margin:0 0 4px 0; font-size:12px; opacity:.9 }
+#miniInfo{ font-size:12px; opacity:.9; margin-bottom:6px }
+#miniMore{ font-size:11px; opacity:.9; margin-top:4px; text-align:right }
+#miniStack .card{ transform: scale(.9) }
+.miniAnchor{
+  position:fixed; width:44px; height:44px; border-radius:22px;
+  background: rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.22);
+  color:#fff; display:none; align-items:center; justify-content:center; z-index:49; font-size:16px;
 }
-.cardback-option .lbl{ font-size:12px; opacity:.95; }
-.cardback-option.selected{ outline:2px solid var(--accent); }
-.cardback-thumb{
-  width:60px; height:84px; border-radius:8px;
+@media (min-width:901px){ #miniPile,.miniAnchor{ display:none !important } }
+
+/* ---------- SETTINGS: HEADINGS / TOGGLES / CHIPS ---------- */
+.sectionTitle{
+  font-weight:800; letter-spacing:.4px; opacity:.95;
+  padding:6px 0 2px; border-bottom:1px solid rgba(255,255,255,.15);
+  margin:6px 0 8px;
+}
+
+/* Toggle (supports both markup variants: .slider OR <i>) */
+.switch{ position:relative; display:inline-block; width:44px; height:24px; }
+.switch input{ opacity:0; width:0; height:0; }
+
+/* Variant 1: <label class="switch"><input ...><span class="slider"></span></label> */
+.switch .slider{
+  position:absolute; inset:0; cursor:pointer;
+  background: rgba(255,255,255,.18);
   border:1px solid rgba(255,255,255,.25);
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,.10);
+  border-radius:999px; transition:.2s;
 }
-/* thumbs reuse same backgrounds via data-style */
-.cardback-thumb[data-style="solid-blue"]     { background: linear-gradient(180deg,#1e4e8c,#153a68); }
-.cardback-thumb[data-style="solid-red"]      { background: linear-gradient(180deg,#b11f1f,#7e1515); }
-.cardback-thumb[data-style="solid-black"]    { background: linear-gradient(180deg,#222,#111); }
-.cardback-thumb[data-style="solid-green"]    { background: linear-gradient(180deg,#156f4a,#0f5437); }
-.cardback-thumb[data-style="mix-red-blue"]   { background: conic-gradient(from 0deg at 50% 50%, #b11f1f, #1e4e8c, #b11f1f); }
-.cardback-thumb[data-style="mix-blue-black"] { background: conic-gradient(from 0deg at 50% 50%, #1e4e8c, #111, #1e4e8c); }
-.cardback-thumb[data-style="mix-red-black"]  { background: conic-gradient(from 0deg at 50% 50%, #b11f1f, #111, #b11f1f); }
-.cardback-thumb[data-style="mix-red-green"]  { background: conic-gradient(from 0deg at 50% 50%, #b11f1f, #156f4a, #b11f1f); }
-.cardback-thumb[data-style="mix-green-black"]{ background: conic-gradient(from 0deg at 50% 50%, #156f4a, #111, #156f4a); }
-.cardback-thumb[data-style="mix-green-blue"] { background: conic-gradient(from 0deg at 50% 50%, #156f4a, #1e4e8c, #156f4a); }
+.switch .slider:before{
+  content:""; position:absolute; height:18px; width:18px; left:3px; top:2px;
+  background:#fff; border-radius:50%; transition:.2s;
+}
+.switch input:checked + .slider{
+  background: var(--toggle-on);
+  border-color: color-mix(in oklab, var(--toggle-on) 70%, black);
+}
+.switch input:checked + .slider:before{ transform: translateX(20px); }
 
-/* A bit more space between table and "Your Hand" on mobile */
-@media (max-width: 600px){
-  #human .section + .section{ margin-top: 22px; }
+/* Variant 2: <label class="switch"><input ...><i></i></label> */
+.switch i{
+  position:absolute; inset:0; cursor:pointer;
+  background: rgba(0,0,0,.25);
+  border:1px solid var(--ui-border);
+  border-radius:999px; transition:background .2s ease, border-color .2s ease;
+}
+.switch i::after{
+  content:""; position:absolute; top:2px; left:2px;
+  width:18px; height:18px; border-radius:50%;
+  background:#fff; transition: transform .2s ease;
+}
+.switch input:checked + i{
+  background: var(--toggle-on);
+  border-color: color-mix(in oklab, var(--toggle-on) 70%, black);
+}
+.switch input:checked + i::after{ transform: translateX(20px); }
+
+/* Small themed inputs/buttons inside modal */
+.themed-btn-ghost{
+  background: transparent;
+  border: 1px solid var(--ui-border);
+}
+.themed-btn:hover{ background: var(--ui-bg-hover); }
+.themed-input-narrow{
+  width:60px; background: var(--ui-bg); border:1px solid var(--ui-border);
+  color:var(--ivory); border-radius:8px; padding:6px 8px;
 }
 
-/* Make the settings modal scrollable on small screens */
-.modal .content{
-  max-height: 80vh;
-  overflow: auto;
+/* Chips & icons */
+.chip{
+  background: rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.22);
+  padding:4px 10px; border-radius:999px; font-size:12px;
+  display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+}
+.icon-btn{
+  background: rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:8px; padding:6px 8px; cursor:pointer;
+}
+.link-btn{
+  background: transparent; border:none; color: var(--ivory);
+  opacity:.9; text-decoration: underline; cursor: pointer;
 }
 
-/* Compact preview line */
-.cardback-preview{
-  display:flex; align-items:center; gap:8px;
-  padding:4px 8px; border-radius:10px;
-  background: rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.18);
-}
-.cardback-preview .lbl{ font-size:12px; opacity:.95 }
-
-/* Card back gallery: 3 per row, smaller thumbs */
+/* ---------- CARD BACK GALLERY (labels hidden) ---------- */
 .cardback-grid{
   display:grid;
   grid-template-columns: repeat(3, minmax(0,1fr));
@@ -180,15 +295,14 @@ button, .card.playable{ touch-action: manipulation }
   display:flex; flex-direction:column; align-items:center; gap:6px;
   cursor:pointer;
 }
-.cardback-option .lbl{ font-size:11px; opacity:.95; text-align:center }
 .cardback-option.selected{ outline:2px solid var(--accent); }
+.cardback-option .lbl{ display:none; }
 .cardback-thumb{
   width:48px; height:68px; border-radius:8px;
   border:1px solid rgba(255,255,255,.25);
   box-shadow: inset 0 0 0 2px rgba(255,255,255,.10);
 }
-
-/* Thumbs reuse same backgrounds via data-style (already defined for .card.faceDown) */
+/* Thumbs reuse the same visuals */
 .cardback-thumb[data-style="solid-blue"]     { background: linear-gradient(180deg,#1e4e8c,#153a68); }
 .cardback-thumb[data-style="solid-red"]      { background: linear-gradient(180deg,#b11f1f,#7e1515); }
 .cardback-thumb[data-style="solid-black"]    { background: linear-gradient(180deg,#222,#111); }
@@ -200,94 +314,87 @@ button, .card.playable{ touch-action: manipulation }
 .cardback-thumb[data-style="mix-green-black"]{ background: conic-gradient(from 0deg at 50% 50%, #156f4a, #111, #156f4a); }
 .cardback-thumb[data-style="mix-green-blue"] { background: conic-gradient(from 0deg at 50% 50%, #156f4a, #1e4e8c, #156f4a); }
 
-/* Slightly tighter layout on very narrow devices */
+/* Favorites presentation (no overlay X) */
+.fav-swatch-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.fav-swatch{ width:20px; height:20px; border-radius:5px; border:1px solid rgba(255,255,255,.25); cursor:pointer; }
+.fav-item{ display:flex; flex-direction:column; align-items:center; gap:6px; padding:6px; border-radius:12px; border:1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.12); }
+.fav-tools{ display:flex; gap:6px; }
+.fav-mini-btn{ font-size:11px; padding:4px 6px; border-radius:8px; border:1px solid var(--ui-border); background: var(--ui-bg); }
+
+/* ---------- COLOR CHIPS (table felt) ---------- */
+.color-chip-row{
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  background: rgba(0,0,0,.12); padding:6px; border-radius:10px;
+  border:1px solid rgba(255,255,255,.12);
+}
+.color-chip{
+  width:28px; height:20px; border-radius:6px;
+  border:1px solid rgba(255,255,255,.25);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.08);
+  cursor:pointer;
+}
+
+/* ---------- CARD FACE (dark theme) ---------- */
+[data-cardface="dark"] .card{
+  background: linear-gradient(180deg,#2a2a2a,#171717);
+  color:#eee; border-color:#3a3a3a;
+}
+[data-cardface="dark"] .card.red{ color:#ff7a7a }
+[data-cardface="dark"] .card.small{ background: linear-gradient(180deg,#272727,#151515); }
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 900px){
+  .table{padding:12px 12px 200px}
+  .board{grid-template-columns: 1fr; gap:16px}
+  .controls{gap:8px}
+  select,button{font-size:16px; padding:12px 14px; border-radius:12px}
+  .panel,.pile{border-radius:14px}
+  .playerHeader .badge{font-size:12px}
+  .card{width:56px; height:80px; font-size:20px; border-radius:12px}
+  .card.small{width:44px; height:64px; font-size:16px}
+  .stack{gap:8px}
+  .scorebar{padding:6px 8px}
+  .picker{left:0; right:0; transform:none; margin:0 8px; bottom:84px; border-radius:16px; padding:12px}
+  .picker button{padding:10px 12px; font-size:16px; border-radius:10px}
+  #aiTop .playerArea{margin-bottom:12px}
+}
+@media (max-width: 600px){
+  h1{font-size:22px}
+  .sub{font-size:14px}
+  .controls{flex-direction:column; align-items:stretch}
+  .controls label{display:flex; justify-content:space-between; align-items:center}
+  .pile h3,.section h3{font-size:13px}
+  .playerHeader{flex-direction:column; align-items:flex-start; gap:4px}
+  .card{width:64px; height:92px; font-size:22px}
+  .card.small{width:48px; height:72px; font-size:18px}
+  .stack{gap:10px}
+  #aiTop .playerArea{padding:8px}
+  .scorebar{gap:8px}
+  .scores{font-size:12px}
+  .picker{bottom:92px}
+
+  /* More space between your table cards and “Your Hand” */
+  #human .section + .section{ margin-top: clamp(32px, 6vw, 48px) !important; }
+
+  /* Apply the single spacing value to YOUR table on mobile */
+  #human .slotRow{ gap: var(--me-mobile-table-space) !important; margin-bottom: calc(var(--me-mobile-table-space) * 2) !important; }
+}
 @media (max-width: 420px){
   .cardback-grid{ grid-template-columns: repeat(3, 1fr); }
   .cardback-thumb{ width:44px; height:62px; }
 }
 
-/* More space between Table cards and "Your Hand" on mobile */
-@media (max-width: 600px){
-  #human .section + .section{
-    /* was ~22px; give it a lot more air */
-    margin-top: clamp(32px, 6vw, 48px) !important;
-  }
+/* ---------- MOBILE-ONLY ROWS IN SETTINGS ---------- */
+.mobile-only { display:none; }
+@media (max-width: 768px){
+  .mobile-only { display:flex; }
 }
-
-/* Apply the single spacing value to YOUR table on mobile */
-@media (max-width: 600px){
-  /* spacing BETWEEN your 4 table cards */
-  #human .slotRow{
-    gap: var(--me-mobile-table-space) !important;
-  }
-
-  /* extra space BELOW your table and ABOVE "Your Hand" */
-  #human .slotRow{
-    gap: var(--me-mobile-table-space) !important;
-    margin-bottom: calc(var(--me-mobile-table-space) * 2) !important;
-  }
-}
-
-/* Hide mobile-only settings on desktop */
-.mobile-only {
-  display: none;
-}
-
-/* Show mobile-only settings only on smaller screens */
-@media (max-width: 768px) {
-  .mobile-only {
-    display: flex; /* same as your .row default */
-  }
-}
-
-/* Mobile-only row in Settings: hidden on desktop, shown on mobile */
-.modal .row.mobile-only {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .modal .row.mobile-only {
-    display: flex; /* same as your .row */
-  }
-}
-
-/* Section headings inside Settings */
-.settings-section{
-  margin:10px 0 4px;
-  font-size:13px;
-  letter-spacing:.3px;
-  opacity:.9;
-  text-transform:uppercase;
-}
-
-/* Felt swatches */
-.felt-swatches{ display:flex; gap:8px; align-items:center }
-.felt-swatch{
-  width:26px; height:26px; border-radius:6px;
-  border:1px solid rgba(255,255,255,.25);
-  cursor:pointer; background:#0a5a3c;
-}
-.felt-swatch[data-color="#0a5a3c"]{ background:#0a5a3c } /* green */
-.felt-swatch[data-color="#8c1e1e"]{ background:#8c1e1e } /* red */
-.felt-swatch[data-color="#1e4e8c"]{ background:#1e4e8c } /* blue */
-
-/* Card face themes */
-[data-cardface="dark"] .card{
-  background: linear-gradient(180deg,#2a2a2a,#171717);
-  color:#eee;
-  border-color:#3a3a3a;
-}
-[data-cardface="dark"] .card.red{ color:#ff7a7a } /* hearts/diamonds pop on dark */
-[data-cardface="dark"] .card.small{
-  background: linear-gradient(180deg,#272727,#151515);
-}
-
-/* Keep the mobile-only rule with higher specificity (you already added this chunk) */
 .modal .row.mobile-only{ display:none; }
 @media (max-width: 768px){
   .modal .row.mobile-only{ display:flex; }
 }
 
+/* ---------- STATS CHART ---------- */
 #statsChart svg{ width:100%; height:220px; display:block; }
 #statsChart .axis text{ font-size:11px; fill:#ddd }
 #statsChart .axis line, #statsChart .axis path{ stroke:#999; opacity:.4 }

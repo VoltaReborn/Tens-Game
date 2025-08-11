@@ -14,11 +14,14 @@ const AI_NAMES=[...MALE_NAMES,...FEMALE_NAMES];
 const settings = {
   pauseBefore:false, warnOn:false, warnThresh:5,
   showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false,
-  cardBack:'blueflame',           // normalized below
   showHintBtn:true,
-  autoAll:false,                  // NEW: auto-play all copies (except A,2,10)
-  feltHex:'#0a5a3c',              // NEW: table color (hex)
-  cardFace:'light'                // NEW: 'light' | 'dark'
+  autoPlayCopies:false,            // NEW: auto-play all copies except A/2/10
+  // appearance
+  tableColor:'#0a5a3c',            // NEW: felt base
+  tableFavorites:[],               // NEW
+  cardBack:'solid-blue',
+  cardBackFavorites:[],            // NEW: array of {bg:string} (CSS background)
+  cardBackCustomBg:''              // NEW: holds current custom background when using custom
 };
 
 function loadSettings(){
@@ -27,30 +30,59 @@ function loadSettings(){
     if(s){ Object.assign(settings, s); }
   }catch(e){}
 
+  // Normalize any legacy card-back names
+  if (settings.cardBack === 'blueflame' || settings.cardBack === 'wave' || settings.cardBack === 'classic'){
+    settings.cardBack = 'solid-blue';
+  }
   if (typeof settings.showHintBtn !== 'boolean') settings.showHintBtn = true;
-  if (!settings.feltHex) settings.feltHex = '#0a5a3c';
-  if (!settings.cardFace) settings.cardFace = 'light';
+  if (typeof settings.autoPlayCopies !== 'boolean') settings.autoPlayCopies = false;
 
-  settings.cardBack = normalizeCardBack(settings.cardBack || 'solid-blue');
+  // Apply table/chrome and cardback immediately
+  applyTableTheme(settings.tableColor);
+  applyCardBackToBody();
 
-  // Apply immediately
-  document.body.dataset.cardback = settings.cardBack;
-  document.body.dataset.cardface = settings.cardFace;
-  applyFelt(settings.feltHex);
-}
-
-// Normalize any legacy card-back value to a supported one
-function normalizeCardBack(val){
-  if (val === 'blueflame' || val === 'wave' || val === 'classic') return 'solid-blue';
-  return val;
+  // Persist back any fills/defaults
+  saveSettings();
 }
 
 function saveSettings(){
-  settings.cardBack = normalizeCardBack(settings.cardBack);
-  try{ localStorage.setItem('tens_settings', JSON.stringify(settings)); }catch(e){}
-  document.body.dataset.cardback = settings.cardBack;
-  document.body.dataset.cardface = settings.cardFace;
-  applyFelt(settings.feltHex);
+  try{
+    localStorage.setItem('tens_settings', JSON.stringify(settings));
+  }catch(e){}
+  // Re-apply on save
+  applyTableTheme(settings.tableColor);
+  applyCardBackToBody();
+  document.body.dataset.cardback = settings.cardBack || 'solid-blue';
+}
+
+// derive felt-dark + chrome vars from a base color
+function applyTableTheme(hex){
+  // crude lighten/darken without dependencies
+  function hexToRgb(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(x=>x+x).join('');
+    const n=parseInt(h,16); return {r:(n>>16)&255, g:(n>>8)&255, b:n&255}; }
+  function rgbToHex(r,g,b){ const c=(r<<16)|(g<<8)|b; return '#'+c.toString(16).padStart(6,'0'); }
+  function clamp(x){ return Math.max(0,Math.min(255,Math.round(x))); }
+  function mix(a,b,t){ return clamp(a+(b-a)*t); }
+  const {r,g,b}=hexToRgb(hex);
+  // darker for --felt-dark
+  const dark = rgbToHex(mix(r,0,.35), mix(g,0,.35), mix(b,0,.35));
+  // chrome bg = slightly transparent felt
+  const chrome = `color-mix(in srgb, ${hex} 88%, black)`;
+  document.documentElement.style.setProperty('--felt', hex);
+  document.documentElement.style.setProperty('--felt-dark', dark);
+  document.documentElement.style.setProperty('--chrome-bg', chrome);
+  document.documentElement.style.setProperty('--chrome-border', 'rgba(255,255,255,.15)');
+}
+
+function applyCardBackToBody(){
+  // If using a custom favorite, we set data-cardback="custom" and provide --cardback-custom-bg
+  if (settings.cardBack === 'custom' && settings.cardBackCustomBg){
+    document.body.dataset.cardback = 'custom';
+    document.body.style.setProperty('--cardback-custom-bg', settings.cardBackCustomBg);
+  } else {
+    document.body.dataset.cardback = settings.cardBack || 'solid-blue';
+    document.body.style.removeProperty('--cardback-custom-bg');
+  }
 }
 
 // ===== State =====
@@ -416,16 +448,118 @@ function promptCountAndPlay(rank, source, max){
   showPicker(rank, source, max);
 }
 
-function showPicker(rank, source, max){
-  const pk=document.getElementById('picker'); pk.innerHTML=''; const p = state.players[state.turn];
-  const title=document.createElement('div'); title.className='row'; const b=document.createElement('b'); b.textContent='Play '+rank+' — choose count:'; title.append(b); pk.append(title);
-  var includeFU=false, includeHand=false; var countCap=max; var capNote=null; var buttons=null;
-  if(source==='hand'){ const fuQty=countFaceUpRank(p, rank); if(fuQty>0){ includeFU=true; countCap=max+fuQty; const row=document.createElement('div'); row.className='row'; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.id='incfu'; const lb=document.createElement('label'); lb.setAttribute('for','incfu'); lb.textContent='Include face-up ('+fuQty+' available)'; cb.onchange=function(){ includeFU=cb.checked; countCap = includeFU ? (max + fuQty) : max; if(capNote) capNote.textContent='Max: '+countCap; rebuildButtons(); }; row.append(cb, lb); pk.append(row); capNote=document.createElement('span'); capNote.style.opacity='.8'; capNote.style.margin='0 8px'; capNote.textContent='Max: '+countCap; pk.append(capNote); } }
-  else if(source==='faceUp'){ const hQty=countHandRank(p, rank); if(hQty>0){ includeHand=true; countCap=max+hQty; const row=document.createElement('div'); row.className='row'; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=true; cb.id='inchand'; const lb=document.createElement('label'); lb.setAttribute('for','inchand'); lb.textContent='Include hand ('+hQty+' available)'; cb.onchange=function(){ includeHand=cb.checked; countCap = includeHand ? (max + hQty) : max; if(capNote) capNote.textContent='Max: '+countCap; rebuildButtons(); }; row.append(cb, lb); pk.append(row); capNote=document.createElement('span'); capNote.style.opacity='.8'; capNote.style.margin='0 8px'; capNote.textContent='Max: '+countCap; pk.append(capNote); } }
-  function rebuildButtons(){ if(!buttons){ buttons=document.createElement('div'); buttons.className='row'; pk.append(buttons); } buttons.innerHTML=''; for(let i=1;i<=countCap;i++){ const btn=document.createElement('button'); btn.textContent=String(i); btn.onclick=function(){ pk.style.display='none'; playCards(state.players[state.turn], rank, source, i, includeFU, includeHand); }; buttons.append(btn);} }
+function showPicker(rank, source, max) {
+  const autoPlay = state.settings.autoPlayMultiples; // new setting from your state
+  const pk = document.getElementById('picker');
+  pk.innerHTML = '';
+  const p = state.players[state.turn];
+
+  var includeFU = false, includeHand = false;
+  var countCap = max;
+  var capNote = null;
+  var buttons = null;
+
+  // Determine additional counts from other zone
+  if (source === 'hand') {
+    const fuQty = countFaceUpRank(p, rank);
+    if (fuQty > 0) {
+      includeFU = true;
+      countCap = max + fuQty;
+      const row = document.createElement('div');
+      row.className = 'row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.id = 'incfu';
+      const lb = document.createElement('label');
+      lb.setAttribute('for', 'incfu');
+      lb.textContent = 'Include face-up (' + fuQty + ' available)';
+      cb.onchange = function () {
+        includeFU = cb.checked;
+        countCap = includeFU ? (max + fuQty) : max;
+        if (capNote) capNote.textContent = 'Max: ' + countCap;
+        rebuildButtons();
+      };
+      row.append(cb, lb);
+      pk.append(row);
+      capNote = document.createElement('span');
+      capNote.style.opacity = '.8';
+      capNote.style.margin = '0 8px';
+      capNote.textContent = 'Max: ' + countCap;
+      pk.append(capNote);
+    }
+  } else if (source === 'faceUp') {
+    const hQty = countHandRank(p, rank);
+    if (hQty > 0) {
+      includeHand = true;
+      countCap = max + hQty;
+      const row = document.createElement('div');
+      row.className = 'row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.id = 'inchand';
+      const lb = document.createElement('label');
+      lb.setAttribute('for', 'inchand');
+      lb.textContent = 'Include hand (' + hQty + ' available)';
+      cb.onchange = function () {
+        includeHand = cb.checked;
+        countCap = includeHand ? (max + hQty) : max;
+        if (capNote) capNote.textContent = 'Max: ' + countCap;
+        rebuildButtons();
+      };
+      row.append(cb, lb);
+      pk.append(row);
+      capNote = document.createElement('span');
+      capNote.style.opacity = '.8';
+      capNote.style.margin = '0 8px';
+      capNote.textContent = 'Max: ' + countCap;
+      pk.append(capNote);
+    }
+  }
+
+  // Auto-play logic
+  const specialRanks = ['A', '2', '10'];
+  if (autoPlay && !specialRanks.includes(rank) && countCap > 1) {
+    pk.style.display = 'none';
+    playCards(state.players[state.turn], rank, source, countCap, includeFU, includeHand);
+    return;
+  }
+
+  // Build normal picker UI
+  const title = document.createElement('div');
+  title.className = 'row';
+  const b = document.createElement('b');
+  b.textContent = 'Play ' + rank + ' — choose count:';
+  title.append(b);
+  pk.append(title);
+
+  function rebuildButtons() {
+    if (!buttons) {
+      buttons = document.createElement('div');
+      buttons.className = 'row';
+      pk.append(buttons);
+    }
+    buttons.innerHTML = '';
+    for (let i = 1; i <= countCap; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = String(i);
+      btn.onclick = function () {
+        pk.style.display = 'none';
+        playCards(state.players[state.turn], rank, source, i, includeFU, includeHand);
+      };
+      buttons.append(btn);
+    }
+  }
+
   rebuildButtons();
-  const cancel=document.createElement('button'); cancel.textContent='Cancel'; cancel.onclick=function(){ pk.style.display='none'; }; pk.append(cancel);
-  pk.style.display='flex';
+
+  const cancel = document.createElement('button');
+  cancel.textContent = 'Cancel';
+  cancel.onclick = function () { pk.style.display = 'none'; };
+  pk.append(cancel);
+
+  pk.style.display = 'flex';
 }
 
 // ===== Play Logic =====
@@ -1331,60 +1465,155 @@ function openSettings(){
   const m = document.getElementById('settingsModal');
   m.style.display = 'flex';
 
-  // Gameplay
+  // Ensure arrays exist in settings
+  if (!Array.isArray(settings.tableCustomColors)) settings.tableCustomColors = [];
+  if (!Array.isArray(settings.cardBackFavs))      settings.cardBackFavs = [];
+
+  // --- Wire toggles/inputs (auto-save on change) ---
   const p  = document.getElementById('setPauseBefore');
   const w  = document.getElementById('setWarnOn');
   const t  = document.getElementById('setWarnThresh');
   const s  = document.getElementById('setSuits');
   const mt = document.getElementById('setMiniTap');
   const sh = document.getElementById('setShowHint');
-  const aa = document.getElementById('setAutoAll');
 
-  p.checked  = settings.pauseBefore;
-  w.checked  = settings.warnOn;
-  t.value    = String(settings.warnThresh);
-  s.checked  = settings.showSuits;
-  mt.checked = settings.miniTap;
+  // set current values
+  p.checked  = !!settings.pauseBefore;
+  w.checked  = !!settings.warnOn;
+  t.value    = String(settings.warnThresh ?? 5);
+  s.checked  = !!settings.showSuits;
+  mt.checked = !!settings.miniTap;
   sh.checked = !!settings.showHintBtn;
-  aa.checked = !!settings.autoAll;
 
-  // Appearance: felt presets + color picker
-  const feltSwatches = document.getElementById('feltSwatches');
-  const feltMoreBtn  = document.getElementById('feltMore');
-  const feltPickerRow= document.getElementById('feltPickerRow');
-  const feltColor    = document.getElementById('feltColor');
-  const feltHexLabel = document.getElementById('feltHexLabel');
+  // auto-save handlers
+  p.onchange = ()=>{ settings.pauseBefore = p.checked; saveSettings(); };
+  w.onchange = ()=>{ settings.warnOn      = w.checked; saveSettings(); };
+  t.onchange = ()=>{ settings.warnThresh  = Math.max(1, Math.min(30, parseInt(t.value||'5',10))); saveSettings(); };
+  s.onchange = ()=>{ settings.showSuits   = s.checked; saveSettings(); render(); };
+  mt.onchange= ()=>{ settings.miniTap     = mt.checked; saveSettings(); };
+  sh.onchange= ()=>{ settings.showHintBtn = sh.checked; saveSettings(); render(); };
 
-  feltColor.value    = settings.feltHex;
-  feltHexLabel.textContent = settings.feltHex.toUpperCase();
-  Array.from(feltSwatches.querySelectorAll('.felt-swatch')).forEach(btn=>{
-    btn.onclick = ()=>{
-      const hex = btn.dataset.color;
-      settings.feltHex = hex;
-      applyFelt(hex);
-      feltColor.value = hex;
-      feltHexLabel.textContent = hex.toUpperCase();
+  // ===== TABLE COLOR =====
+  const presetWrap = document.getElementById('tablePresetChips');
+  const addBtn     = document.getElementById('tableColorAdd');
+  const editBtn    = document.getElementById('tableColorEdit');
+  const colorPick  = document.getElementById('tableColorPicker');
+
+  const PRESETS = [
+    {name:'green', hex:'#0a5a3c'},
+    {name:'blue',  hex:'#153a68'},
+    {name:'red',   hex:'#7e1515'}
+  ];
+
+  function applyTable(hex){
+    document.documentElement.style.setProperty('--felt', hex);
+    document.documentElement.style.setProperty('--felt-dark', hex);
+    // derive toggle color immediately from new felt (CSS uses color-mix)
+    settings.tableColor = hex;
+    saveSettings();
+  }
+
+  function quickChip(hex){
+    const b = document.createElement('button');
+    b.type='button';
+    b.className='color-chip';
+    b.style.background = hex;
+    b.title = hex;
+    b.onclick = ()=> applyTable(hex);
+    return b;
+  }
+
+  let tableEditMode = false;
+
+  function toColorInput(hex){
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.fillStyle = hex;
+    return ctx.fillStyle.length === 7 ? ctx.fillStyle : '#000000';
+  }
+
+  function renderTableRow(){
+    presetWrap.innerHTML = '';
+
+    if (!tableEditMode){
+      // Presets as chips
+      PRESETS.forEach(p => presetWrap.appendChild(quickChip(p.hex)));
+      // Customs as chips
+      settings.tableCustomColors.forEach(hex => presetWrap.appendChild(quickChip(hex)));
+    } else {
+      // Structured items (chip + Edit/Delete buttons)
+      PRESETS.forEach(p=>{
+        const item = document.createElement('div');
+        item.className='chip-item';
+        const box = document.createElement('div');
+        box.className='chip-box';
+        box.style.background = p.hex;
+        const tools = document.createElement('div');
+        tools.className='chip-tools';
+        const useBtn = document.createElement('button'); useBtn.className='chip-mini-btn'; useBtn.textContent='Use';
+        useBtn.onclick = ()=> applyTable(p.hex);
+        tools.append(useBtn);
+        item.append(box, tools);
+        presetWrap.appendChild(item);
+      });
+
+      settings.tableCustomColors.forEach((hex, idx)=>{
+        const item = document.createElement('div');
+        item.className='chip-item';
+        const box = document.createElement('div');
+        box.className='chip-box';
+        box.style.background = hex;
+        const tools = document.createElement('div');
+        tools.className='chip-tools';
+
+        const useBtn = document.createElement('button'); useBtn.className='chip-mini-btn'; useBtn.textContent='Use';
+        useBtn.onclick = ()=> applyTable(hex);
+
+        const editSmall = document.createElement('button'); editSmall.className='chip-mini-btn'; editSmall.textContent='Edit';
+        editSmall.onclick = ()=>{
+          colorPick.value = toColorInput(hex);
+          colorPick.onchange = ()=>{
+            const nv = colorPick.value;
+            settings.tableCustomColors[idx] = nv;
+            applyTable(nv);
+            renderTableRow();
+          };
+          colorPick.click();
+        };
+
+        const delBtn = document.createElement('button'); delBtn.className='chip-mini-btn'; delBtn.textContent='Delete';
+        delBtn.onclick = ()=>{
+          settings.tableCustomColors.splice(idx,1);
+          saveSettings();
+          renderTableRow();
+        };
+
+        tools.append(useBtn, editSmall, delBtn);
+        item.append(box, tools);
+        presetWrap.appendChild(item);
+      });
+    }
+
+    editBtn.textContent = tableEditMode ? 'Done' : 'Edit';
+  }
+
+  addBtn.onclick = ()=>{
+    colorPick.value = '#156f4a';
+    colorPick.onchange = ()=>{
+      const val = colorPick.value;
+      if (!settings.tableCustomColors.includes(val)){
+        settings.tableCustomColors.push(val);
+      }
+      applyTable(val);
+      renderTableRow();
     };
-  });
-  feltMoreBtn.onclick = ()=>{
-    const open = feltPickerRow.style.display !== 'none';
-    feltPickerRow.style.display = open ? 'none' : 'flex';
+    colorPick.click();
   };
-  feltColor.oninput = (e)=>{
-    settings.feltHex = e.target.value;
-    applyFelt(settings.feltHex);
-    feltHexLabel.textContent = settings.feltHex.toUpperCase();
-  };
+  editBtn.onclick = ()=>{ tableEditMode = !tableEditMode; renderTableRow(); };
 
-  // Card face theme
-  const cf = document.getElementById('setCardFace');
-  cf.value = settings.cardFace;
-  cf.onchange = ()=>{
-    settings.cardFace = cf.value;
-    document.body.dataset.cardface = settings.cardFace;
-  };
+  renderTableRow();
+  if (settings.tableColor) applyTable(settings.tableColor);
 
-  // Card-back options (same list you already had)
+  // ===== CARD BACKS =====
   const OPTIONS = [
     {value:'solid-blue',      label:'Solid Blue'},
     {value:'solid-red',       label:'Solid Red'},
@@ -1397,56 +1626,179 @@ function openSettings(){
     {value:'mix-green-black', label:'Green/Black Mix'},
     {value:'mix-green-blue',  label:'Green/Blue Mix'},
   ];
-
-  const gallery = document.getElementById('cardBackGallery');
+  const gallery      = document.getElementById('cardBackGallery');
   const previewThumb = document.getElementById('cardBackPreviewThumb');
   const previewLabel = document.getElementById('cardBackPreviewLabel');
-  const toggleBtn = document.getElementById('cardBackToggle');
-  const ui = document.getElementById('cardBackUI');
+  const ui           = document.getElementById('cardBackUI');
+  const panel        = document.getElementById('cardBackPanel');
+  const favRow       = document.getElementById('cardBackFavRow');
+  const favWrap      = document.getElementById('cardBackFavs');
+  const favEditBtn   = document.getElementById('cardBackEdit');
 
-  function labelFor(val){
-    const hit = OPTIONS.find(o => o.value === val);
-    return hit ? hit.label : val;
+  const addSolid     = document.getElementById('addSolidBack');
+  const addMix       = document.getElementById('addMixBack');
+  const pickSolid    = document.getElementById('cardBackSolidPicker');
+  const pickMixA     = document.getElementById('cardBackMixA');
+  const pickMixB     = document.getElementById('cardBackMixB');
+
+  function setThumbBackground(el, style){
+    el.removeAttribute('data-style');
+    el.style.background = '';
+    if (style.startsWith && style.startsWith('solid:')){
+      const hex = style.slice(6);
+      el.style.background = `linear-gradient(180deg, ${hex}, ${hex})`;
+    } else if (style.startsWith && style.startsWith('mix:')){
+      const [a,b] = style.slice(4).split(',');
+      el.style.background = `conic-gradient(from 0deg at 50% 50%, ${a}, ${b}, ${a})`;
+    } else {
+      el.setAttribute('data-style', style);
+    }
   }
   function renderPreview(){
-    previewThumb.setAttribute('data-style', settings.cardBack);
-    previewLabel.textContent = labelFor(settings.cardBack);
+    setThumbBackground(previewThumb, settings.cardBack);
+    previewLabel.textContent = ''; // visuals only
   }
+  function saveCardBack(val){
+    settings.cardBack = val;
+    saveSettings();
+    renderPreview();
+    renderMiniPile();
+  }
+
   function buildGallery(){
     gallery.innerHTML = '';
-    OPTIONS.forEach(opt => {
+    OPTIONS.forEach(opt=>{
       const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'cardback-option' + (settings.cardBack === opt.value ? ' selected' : '');
-      btn.setAttribute('aria-label', opt.label);
-      btn.dataset.value = opt.value;
-      btn.innerHTML = `
-        <div class="cardback-thumb" data-style="${opt.value}"></div>
-        <div class="lbl">${opt.label}</div>
-      `;
-      btn.onclick = () => {
-        settings.cardBack = opt.value;
-        saveSettings();
+      btn.type='button';
+      btn.className='cardback-option' + (settings.cardBack===opt.value ? ' selected' : '');
+      btn.innerHTML=`<div class="cardback-thumb" data-style="${opt.value}"></div>`;
+      btn.onclick=()=>{
+        saveCardBack(opt.value);
         document.querySelectorAll('#cardBackGallery .cardback-option.selected')
-          .forEach(n => n.classList.remove('selected'));
+          .forEach(n=>n.classList.remove('selected'));
         btn.classList.add('selected');
-        renderPreview();
-        renderMiniPile();
       };
       gallery.appendChild(btn);
     });
   }
-  renderPreview();
-  buildGallery();
 
-  const expanded = ui.dataset.expanded === 'true';
+  let favEditMode = false;
+  function renderCardBackFavs(){
+    const favs = settings.cardBackFavs || [];
+    if (favs.length === 0){
+      favRow.style.display = 'none';
+      favWrap.innerHTML = '';
+      return;
+    }
+    favRow.style.display = '';
+    favWrap.innerHTML = '';
+
+    favs.forEach((style, idx)=>{
+      const item = document.createElement('div');
+      item.className = 'fav-item';
+
+      const th = document.createElement('div');
+      th.className='cardback-thumb';
+      setThumbBackground(th, style);
+      item.append(th);
+
+      if (favEditMode){
+        const tools = document.createElement('div');
+        tools.className = 'fav-tools';
+
+        const useBtn = document.createElement('button'); useBtn.className='fav-mini-btn'; useBtn.textContent='Use';
+        useBtn.onclick = ()=> saveCardBack(style);
+
+        const editBtn = document.createElement('button'); editBtn.className='fav-mini-btn'; editBtn.textContent='Edit';
+        editBtn.onclick = ()=>{
+          if (style.startsWith('solid:')){
+            pickSolid.value = style.slice(6);
+            pickSolid.onchange = ()=>{
+              const nv = 'solid:' + pickSolid.value;
+              settings.cardBackFavs[idx] = nv;
+              saveSettings(); renderCardBackFavs();
+            };
+            pickSolid.click();
+          } else if (style.startsWith('mix:')){
+            const [a,b] = style.slice(4).split(',');
+            pickMixA.value = a; pickMixB.value = b;
+            pickMixA.onchange = ()=>{
+              pickMixB.onchange = ()=>{
+                const nv = 'mix:' + pickMixA.value + ',' + pickMixB.value;
+                settings.cardBackFavs[idx] = nv;
+                saveSettings(); renderCardBackFavs();
+              };
+              pickMixB.click();
+            };
+            pickMixA.click();
+          }
+        };
+
+        const delBtn = document.createElement('button'); delBtn.className='fav-mini-btn'; delBtn.textContent='Delete';
+        delBtn.onclick = ()=>{
+          settings.cardBackFavs.splice(idx,1);
+          saveSettings(); renderCardBackFavs();
+        };
+
+        tools.append(useBtn, editBtn, delBtn);
+        item.append(tools);
+      } else {
+        // normal click selects
+        item.onclick = ()=> saveCardBack(style);
+      }
+
+      favWrap.append(item);
+    });
+  }
+
+  // Preview toggles panel
+  const previewBox = document.getElementById('cardBackPreview');
   function setExpanded(on){
     ui.dataset.expanded = on ? 'true' : 'false';
-    gallery.style.display = on ? 'grid' : 'none';
-    toggleBtn.textContent = on ? 'Hide Options' : 'Change';
+    panel.style.display = on ? 'block' : 'none';
   }
-  setExpanded(expanded);
-  toggleBtn.onclick = () => setExpanded(ui.dataset.expanded !== 'true');
+  previewBox.onclick = ()=> setExpanded(ui.dataset.expanded !== 'true');
+
+  // Create new custom
+  addSolid.onclick = ()=>{
+    pickSolid.value = '#1e4e8c';
+    pickSolid.onchange = ()=>{
+      const val = 'solid:' + pickSolid.value;
+      if (!settings.cardBackFavs.includes(val)) settings.cardBackFavs.push(val);
+      saveSettings(); renderCardBackFavs(); saveCardBack(val);
+    };
+    pickSolid.click();
+  };
+  addMix.onclick = ()=>{
+    pickMixA.value = '#b11f1f';
+    pickMixB.value = '#153a68';
+    pickMixA.onchange = ()=>{
+      pickMixB.onchange = ()=>{
+        const val = 'mix:' + pickMixA.value + ',' + pickMixB.value;
+        if (!settings.cardBackFavs.includes(val)) settings.cardBackFavs.push(val);
+        saveSettings(); renderCardBackFavs(); saveCardBack(val);
+      };
+      pickMixB.click();
+    };
+    pickMixA.click();
+  };
+
+  // Favorites edit toggle
+  const favEditBtnEl = document.getElementById('cardBackEdit');
+  favEditBtnEl.onclick = ()=>{
+    favEditMode = !favEditMode;
+    favEditBtnEl.textContent = favEditMode ? 'Done' : 'Edit';
+    renderCardBackFavs();
+  };
+
+  // Initial renders
+  renderPreview();
+  buildGallery();
+  renderCardBackFavs();
+
+  // Close button (single action)
+  const closeBtn = document.getElementById('setClose');
+  closeBtn.onclick = ()=>{ m.style.display = 'none'; };
 }
 
 function saveSettingsFromUI(){
@@ -1456,9 +1808,7 @@ function saveSettingsFromUI(){
   const s  = document.getElementById('setSuits');
   const mt = document.getElementById('setMiniTap');
   const sh = document.getElementById('setShowHint');
-  const aa = document.getElementById('setAutoAll');
-  const cf = document.getElementById('setCardFace');
-  const feltColor = document.getElementById('feltColor');
+  const ap = document.getElementById('setAutoPlayCopies');
 
   settings.pauseBefore = !!p.checked;
   settings.warnOn      = !!w.checked;
@@ -1466,9 +1816,7 @@ function saveSettingsFromUI(){
   settings.showSuits   = !!s.checked;
   settings.miniTap     = !!mt.checked;
   settings.showHintBtn = !!sh.checked;
-  settings.autoAll     = !!aa.checked;
-  settings.cardFace    = cf.value;
-  settings.feltHex     = feltColor.value;
+  settings.autoPlayCopies = !!ap.checked;
 
   saveSettings();
   document.getElementById('settingsModal').style.display = 'none';
@@ -1490,8 +1838,10 @@ document.body.dataset.cardback=settings.cardBack;
   document.getElementById('newGame').addEventListener('click',function(){ forfeitMatch(); });
   document.getElementById('runTests').addEventListener('click',function(){ runTests(); });
   document.getElementById('settingsBtn').addEventListener('click',openSettings);
-  document.getElementById('setSave').addEventListener('click',saveSettingsFromUI);
-  document.getElementById('setCancel').addEventListener('click',function(){ document.getElementById('settingsModal').style.display='none'; });
+  document.getElementById('settingsBtn').addEventListener('click',openSettings);
+  document.querySelector('#settingsModal .backdrop').addEventListener('click',function(){
+  document.getElementById('settingsModal').style.display='none';
+  });
   document.querySelector('#settingsModal .backdrop').addEventListener('click',function(){ document.getElementById('settingsModal').style.display='none'; });
   document.getElementById('scoreToggle').addEventListener('click',function(){ const sb=document.getElementById('scorebar'); const c=sb.classList.toggle('collapsed'); document.getElementById('scoreToggle').textContent = c? 'Info ▾' : 'Info ▴'; });
   document.getElementById('hintBtn').addEventListener('click',openHint);
