@@ -93,6 +93,8 @@ function render(){
   const aiWrap = document.getElementById('aiTop'), meWrap = document.getElementById('human');
   aiWrap.innerHTML = ''; meWrap.innerHTML = '';
 
+  const isMobile = window.innerWidth <= 600;
+
   state.players.forEach((p, idx) => {
     const area = document.createElement('div');
     area.className = 'playerArea' + (p.isHuman ? ' me' : '');
@@ -110,8 +112,11 @@ function render(){
     const slotRow = document.createElement('div');
     slotRow.style.display = 'grid';
     slotRow.style.gridTemplateColumns = 'repeat(4, 56px)';
-    slotRow.style.gap = '12px';
-    slotRow.style.marginBottom = (window.innerWidth <= 600 ? '22px' : '16px');
+    // 👉 Increase spacing ONLY for the human player's table on mobile
+    slotRow.style.gap = (p.isHuman && isMobile) ? '16px' : '12px';
+    // Margin below the grid — human/mobile spacing comes mainly from CSS rule on the next section,
+    // so keep this neutral and consistent:
+    slotRow.style.marginBottom = '12px';
 
     p.slots.forEach((s, slotIdx) => {
       const col = document.createElement('div');
@@ -193,14 +198,9 @@ function render(){
       (function handleHintButton(){
         const hintBtn = document.getElementById('hintBtn');
         const controls = document.querySelector('.controls');
-        const isMobile = window.innerWidth <= 600;
-
-        // Ensure default if old saves didn't have it
-        if (typeof settings.showHintBtn !== 'boolean') settings.showHintBtn = true;
 
         let holder = document.getElementById('mobileHintHolder');
         if (!settings.showHintBtn){
-          // Hide and put it back into controls if needed; remove mobile holder
           if (hintBtn){
             hintBtn.style.display = 'none';
             if (controls && hintBtn.parentElement !== controls){
