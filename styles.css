@@ -227,3 +227,15 @@ button, .card.playable{ touch-action: manipulation }
     margin-bottom: calc(var(--me-mobile-table-space) * 2) !important;
   }
 }
+
+/* Hide mobile-only settings on desktop */
+.mobile-only {
+  display: none;
+}
+
+/* Show mobile-only settings only on smaller screens */
+@media (max-width: 768px) {
+  .mobile-only {
+    display: flex; /* same as your .row default */
+  }
+}
