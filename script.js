@@ -2,7 +2,6 @@
 const SUITS=["♠","♥","♦","♣"]; const RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"]; const RVAL=Object.fromEntries(RANKS.map((r,i)=>[r,i+1]));
 const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 function scoringValue(rank){ if(rank==='10')return 30; if(['J','Q','K'].includes(rank))return 10; if(rank==='A')return 1; return Number(rank); }
-function decksForPlayers(p){ if(p===2)return 1; if(p<=5)return 2; if(p<=8)return 3; if(p<=10)return 4; if(p<=13)return 5; return 6; }
 function makeDeck(n){ const d=[]; for(let k=0;k<n;k++){ for(const s of SUITS){ for(const r of RANKS){ d.push({r,s}); } } } return shuffle(d); }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const ai=a[i]; const aj=a[j]; a[i]=aj; a[j]=ai; } return a; }
 
@@ -450,25 +449,23 @@ async function tryFlipFaceDownSlot(slotIdx){
 
   const c = s.down;         // the blind card
   s.down = null;
-
   if(!c){ render(); return; }
 
   const rv = RVAL[c.r];
   const prevLabel = labelActive();
-
   const isHuman = !!p.isHuman;
-  if(isHuman) state.uiLock = true;  // ← lock input during forced reveal+play
+
+  if(isHuman) state.uiLock = true;  // lock input during forced reveal+play
 
   try{
     if(isHuman){
-      await showRevealModal(c);     // show the card; user must acknowledge
+      await showRevealModal(c);     // user acknowledges the flipped card
     }
 
-    // If over the current value (and not a 10), forced pickup
+    // Overplay on blind flip (not a 10): forced pickup, same player continues
     if(state.currentValue !== null && rv > state.currentValue && c.r !== '10'){
       const pileBefore = state.pile.slice();
       const show = pileBefore.concat([c]);
-
       logAction(p.name+' flips '+c.r+' over '+prevLabel+'; picks up.', {snapshotCards:show});
       await maybePauseBefore('pickup', show, p.name);
 
@@ -483,25 +480,31 @@ async function tryFlipFaceDownSlot(slotIdx){
       render();
       logBoardState();
       await sleep(80);
-      return p.isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
+      return isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
     }
 
     // Otherwise, the flipped card is immediately played
-    logAction(p.name+' flips '+c.r+(p.isHuman?'':' (AI)')+'; was '+prevLabel+'.',{snapshotCards:[].concat(state.pile.slice(),[c])});
+    logAction(p.name+' flips '+c.r+(isHuman?'':' (AI)')+'; was '+prevLabel+'.',
+              {snapshotCards:[].concat(state.pile.slice(),[c])});
     state.pile.push(c);
 
+    // Blind 10 clears → same player must continue
     if(c.r === '10'){
       const snap = state.pile.slice();
       await maybePauseBefore('clear', snap, p.name);
       await clearPile(p, '10 (blind)');
-      if(hasCards(p)) return enableHumanChoices();
+      if(hasCards(p)){
+        await sleep(160);
+        return isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
+      }
     } else {
+      // Update active value/count
       if(state.currentValue === null){ state.currentValue = rv; state.currentCount = 1; }
       else if(rv === state.currentValue){ state.currentCount += 1; }
       else { state.currentValue = rv; state.currentCount = 1; }
 
-      // If human, only allow adding same-rank extras via the reveal-choice picker
-      if(p.isHuman){
+      // Human may optionally add same-rank extras via the reveal-choice picker
+      if(isHuman){
         const fuQty = countFaceUpRank(p, c.r);
         const hQty  = countHandRank(p, c.r);
         if(fuQty > 0 || hQty > 0){
@@ -529,26 +532,24 @@ async function tryFlipFaceDownSlot(slotIdx){
           }
         }
       } else {
-        // AI can automatically add all same-rank extras (unchanged)
+        // AI auto-adds all same-rank extras
         const canFU = removeFaceUpOfRank(p, c.r, 99);
-        if(canFU.length){
-          state.pile.push.apply(state.pile, canFU);
-          state.currentCount += canFU.length;
-        }
+        if(canFU.length){ state.pile.push.apply(state.pile, canFU); state.currentCount += canFU.length; }
         let addH = [], rest = [];
         for(const x of p.hand){ if(x && x.r === c.r) addH.push(x); else rest.push(x); }
         p.hand = rest;
-        if(addH.length){
-          state.pile.push.apply(state.pile, addH);
-          state.currentCount += addH.length;
-        }
+        if(addH.length){ state.pile.push.apply(state.pile, addH); state.currentCount += addH.length; }
       }
 
+      // Four-or-more clears → same player must continue
       if(state.currentCount >= 4){
         const snap2 = state.pile.slice();
         await maybePauseBefore('clear', snap2, p.name);
         await clearPile(p, c.r+' reached '+state.currentCount);
-        if(hasCards(p)) return enableHumanChoices();
+        if(hasCards(p)){
+          await sleep(160);
+          return isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
+        }
       }
     }
 
@@ -556,7 +557,7 @@ async function tryFlipFaceDownSlot(slotIdx){
     logBoardState();
     endOrNext();
   } finally {
-    if(isHuman) state.uiLock = false;   // ← always release the lock
+    if(isHuman) state.uiLock = false;  // always release the lock for humans
   }
 }
 
