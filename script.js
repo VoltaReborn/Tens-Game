@@ -47,7 +47,21 @@ function saveSettings(){
   document.body.dataset.cardback = settings.cardBack;
 }
 // ===== State =====
-const state={ players:[], pile:[], currentValue:null, currentCount:0, turn:0, roundActive:false, dealer:-1, matchActive:true, mustDeclare:new Set(), warnedAt:new Map(), roundStats:null, aiAdaptive:'medium' };
+const state = {
+  players: [],
+  pile: [],
+  currentValue: null,
+  currentCount: 0,
+  turn: 0,
+  roundActive: false,
+  dealer: -1,
+  matchActive: true,
+  mustDeclare: new Set(),
+  warnedAt: new Map(),
+  roundStats: null,
+  aiAdaptive: 'medium',
+  uiLock: false  // ← lock human input during forced flows (e.g., blind flip)
+};
 function freshPlayers(n){
   const needAI=Math.max(0,n-1);
   const pool=shuffle([...AI_NAMES]);
@@ -58,7 +72,32 @@ function nextDealer(){ state.dealer=(state.dealer+1)%state.players.length; }
 function resetMatch(){ state.players.forEach(p=>p.score=0); state.dealer=-1; state.matchActive=true; logClear(); updateScores(); state.warnedAt.clear(); }
 
 // ===== Deal (ensure 11 hand + 4 up/4 down) =====
-function ensureDeckSizeFor(nPlayers){ const needEach=11+8; const needTotal=nPlayers*needEach; let decks=decksForPlayers(nPlayers); let deck=makeDeck(decks); while(deck.length<needTotal){ decks+=1; deck=makeDeck(decks); } return deck; }
+// Build exactly the number of cards needed: players * 19.
+// Use ceil(need/52) decks; include full decks first, then only the needed
+// cards from the last deck so any "leftover" comes from ONE deck (the last).
+function ensureDeckSizeFor(nPlayers){
+  const needEach = 11 + 8;           // 19 per player
+  const needTotal = nPlayers * needEach;
+  const FULL = 52;
+
+  const decksNeeded = Math.ceil(needTotal / FULL);
+  const gameDeck = [];
+
+  // Add full shuffled decks (decksNeeded - 1)
+  for(let i=0; i<Math.max(0, decksNeeded - 1); i++){
+    const d = makeDeck(1);           // one full deck, shuffled
+    gameDeck.push(...d);
+  }
+
+  // Add only as many as we still need from the last deck
+  const lastNeed = needTotal - gameDeck.length;
+  if(lastNeed > 0){
+    const last = makeDeck(1);        // another single deck, shuffled
+    gameDeck.push(...last.slice(0, lastNeed));
+  }
+
+  return gameDeck;                   // exactly needTotal cards
+}
 function dealRound(){ const d=ensureDeckSizeFor(state.players.length); for(const p of state.players){ p.hand=[]; p.slots=[]; }
   for(const p of state.players){ for(let i=0;i<4;i++){ const down=d.pop(); const up=d.pop(); p.slots.push({down,up}); } }
   for(const p of state.players){ for(let i=0;i<11;i++){ p.hand.push(d.pop()); } }
@@ -113,7 +152,6 @@ function render(){
     slotRow.className = 'slotRow';
     slotRow.style.display = 'grid';
     slotRow.style.gridTemplateColumns = 'repeat(4, 56px)';
-    // 👉 Increase spacing ONLY for the human player's table on mobile
 
     p.slots.forEach((s, slotIdx) => {
       const col = document.createElement('div');
@@ -129,7 +167,10 @@ function render(){
         if (p.isHuman && state.turn === p.id && state.roundActive && !(s.up)) {
           downEl.classList.add('playable');
           downEl.title = 'Flip this face-down card';
-          downEl.onclick = function(){ tryFlipFaceDownSlot(slotIdx); };
+          downEl.onclick = function(){
+            if(state.uiLock) return;               // ← guard while locked
+            tryFlipFaceDownSlot(slotIdx);
+          };
         }
         col.append(downEl);
       }
@@ -144,7 +185,10 @@ function render(){
         if (p.isHuman && state.turn === p.id && state.roundActive) {
           const qtyFU = countFaceUpRank(p, s.up.r);
           upEl.classList.add('playable');
-          upEl.onclick = function(){ promptCountAndPlay(s.up.r, 'faceUp', qtyFU); };
+          upEl.onclick = function(){
+            if(state.uiLock) return;               // ← guard while locked
+            promptCountAndPlay(s.up.r, 'faceUp', qtyFU);
+          };
         }
         col.append(upEl);
       }
@@ -173,25 +217,32 @@ function render(){
 
       const groups = groupByRank(p.hand);
       Object.keys(groups)
-        .sort(function(a,b){return RVAL[a]-RVAL[b];})
+        .sort((a,b) => RVAL[a]-RVAL[b])
         .forEach(function(r){
-          const qty = groups[r].length;
+          const cardsOfRank = groups[r].filter(Boolean);
+          const qty = cardsOfRank.length;
+
           const wrap = document.createElement('div');
           wrap.style.display = 'flex';
           wrap.style.gap = '4px';
-          groups[r].forEach(function(){
-            const el = makeCardEl({ r:r, s:'♠' }, false, false);
+
+          cardsOfRank.forEach(function(card){
+            const el = makeCardEl(card, false, false);
             if (canPlayRank(r)) el.classList.add('playable');
-            el.onclick = function(){ promptCountAndPlay(r, 'hand', qty); };
+            el.onclick = function(){
+              if(state.uiLock) return;             // ← guard while locked
+              promptCountAndPlay(r, 'hand', qty);
+            };
             wrap.append(el);
           });
+
           handRow.append(wrap);
         });
 
       area.append(handSec);
       area.append(handRow);
 
-      // -- Hint button visibility + mobile relocation --
+      // Hint button relocation/visibility (unchanged)
       (function handleHintButton(){
         const hintBtn = document.getElementById('hintBtn');
         const controls = document.querySelector('.controls');
@@ -295,19 +346,29 @@ function showRevealChoicePicker(rank, fuQty, hQty){ return new Promise(function(
 // ===== Human interactions (picker) =====
 function promptCountAndPlay(rank, source, max){
   if(!state.roundActive) return;
+  if(state.uiLock) return; // ← ignore clicks while a forced flow is in progress
+
   const current = state.players[state.turn];
   if(!current || !current.isHuman) return;
+
   if(source==='faceUp' && countFaceUpRank(current, rank)===0) return;
+
   if(rank==='10'){
     playCards(current, rank, source, 1, false, false);
     return;
   }
+
   const fuQty = countFaceUpRank(current, rank);
   const hQty  = countHandRank(current, rank);
+
   if(max===1){
     const extrasElsewhere = (source==='hand') ? (fuQty>0) : (hQty>0);
-    if(!extrasElsewhere){ playCards(current, rank, source, 1, false, false); return; }
+    if(!extrasElsewhere){
+      playCards(current, rank, source, 1, false, false);
+      return;
+    }
   }
+
   showPicker(rank, source, max);
 }
 
@@ -382,21 +443,122 @@ function modalBase(msg,blocking){ if(blocking===undefined) blocking=true; const 
 function showBlockingModal(msg){ modalBase(msg,true); }
 
 // ===== Face-down flip =====
-async function tryFlipFaceDownSlot(slotIdx){ const p=state.players[state.turn]; const s=p.slots[slotIdx]; if(!s||s.up||!s.down) return; const c=s.down; s.down=null; if(!c){ render(); return; } const rv=RVAL[c.r]; const prevLabel=labelActive(); if(p.isHuman){ await showRevealModal(c); }
-  if(state.currentValue!==null && rv>state.currentValue && c.r!=='10'){ const pileBefore=state.pile.slice(); const show=pileBefore.concat([c]); logAction(p.name+' flips '+c.r+' over '+prevLabel+'; picks up.',{snapshotCards:show}); await maybePauseBefore('pickup',show,p.name); if(state.pile.length){ p.hand.push.apply(p.hand,state.pile.filter(Boolean)); } state.pile = []; p.hand.push(c); state.currentValue=null; state.currentCount=0; incPickup(p); render(); logBoardState(); await sleep(80); return p.isHuman? enableHumanChoices(): aiTakeTurn(p,true); }
-  logAction(p.name+' flips '+c.r+(p.isHuman?'':' (AI)')+'; was '+prevLabel+'.',{snapshotCards:[].concat(state.pile.slice(),[c])}); state.pile.push(c);
-  if(c.r==='10'){ const snap=state.pile.slice(); await maybePauseBefore('clear',snap,p.name); await clearPile(p,'10 (blind)'); if(hasCards(p)) return enableHumanChoices(); }
-  else {
-    if(state.currentValue===null){ state.currentValue=rv; state.currentCount=1; }
-    else if(rv===state.currentValue){ state.currentCount+=1; }
-    else { state.currentValue=rv; state.currentCount=1; }
+async function tryFlipFaceDownSlot(slotIdx){
+  const p = state.players[state.turn];
+  const s = p.slots[slotIdx];
+  if(!s || s.up || !s.down) return;
 
-    if(p.isHuman){ const fuQty=countFaceUpRank(p,c.r); const hQty=countHandRank(p,c.r); if(fuQty>0 || hQty>0){ const choice=await showRevealChoicePicker(c.r,fuQty,hQty); if(choice){ let toAdd=choice.count-1; if(choice.useFU && fuQty>0){ const takeFU=Math.min(fuQty,toAdd); const extraFU=removeFaceUpOfRank(p,c.r,takeFU); state.pile.push.apply(state.pile,extraFU); state.currentCount+=extraFU.length; toAdd-=extraFU.length; } if(choice.useHand && hQty>0 && toAdd>0){ let moved=0; const rest=[]; for(const x of p.hand){ if(x && moved<toAdd && x.r===c.r){ state.pile.push(x); moved++; } else rest.push(x); } p.hand=rest; state.currentCount+=moved; } } } }
-    else { const canFU=removeFaceUpOfRank(p,c.r,99); if(canFU.length){ state.pile.push.apply(state.pile,canFU); state.currentCount+=canFU.length; } let addH=[], rest=[]; for(const x of p.hand){ if(x && x.r===c.r) addH.push(x); else rest.push(x); } p.hand=rest; if(addH.length){ state.pile.push.apply(state.pile,addH); state.currentCount+=addH.length; } }
+  const c = s.down;         // the blind card
+  s.down = null;
 
-    if(state.currentCount>=4){ const snap2=state.pile.slice(); await maybePauseBefore('clear',snap2,p.name); await clearPile(p,c.r+' reached '+state.currentCount); if(hasCards(p)) return enableHumanChoices(); }
+  if(!c){ render(); return; }
+
+  const rv = RVAL[c.r];
+  const prevLabel = labelActive();
+
+  const isHuman = !!p.isHuman;
+  if(isHuman) state.uiLock = true;  // ← lock input during forced reveal+play
+
+  try{
+    if(isHuman){
+      await showRevealModal(c);     // show the card; user must acknowledge
+    }
+
+    // If over the current value (and not a 10), forced pickup
+    if(state.currentValue !== null && rv > state.currentValue && c.r !== '10'){
+      const pileBefore = state.pile.slice();
+      const show = pileBefore.concat([c]);
+
+      logAction(p.name+' flips '+c.r+' over '+prevLabel+'; picks up.', {snapshotCards:show});
+      await maybePauseBefore('pickup', show, p.name);
+
+      if(state.pile.length){
+        p.hand.push.apply(p.hand, state.pile.filter(Boolean));
+      }
+      state.pile = [];
+      p.hand.push(c);
+      state.currentValue = null;
+      state.currentCount = 0;
+      incPickup(p);
+      render();
+      logBoardState();
+      await sleep(80);
+      return p.isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
+    }
+
+    // Otherwise, the flipped card is immediately played
+    logAction(p.name+' flips '+c.r+(p.isHuman?'':' (AI)')+'; was '+prevLabel+'.',{snapshotCards:[].concat(state.pile.slice(),[c])});
+    state.pile.push(c);
+
+    if(c.r === '10'){
+      const snap = state.pile.slice();
+      await maybePauseBefore('clear', snap, p.name);
+      await clearPile(p, '10 (blind)');
+      if(hasCards(p)) return enableHumanChoices();
+    } else {
+      if(state.currentValue === null){ state.currentValue = rv; state.currentCount = 1; }
+      else if(rv === state.currentValue){ state.currentCount += 1; }
+      else { state.currentValue = rv; state.currentCount = 1; }
+
+      // If human, only allow adding same-rank extras via the reveal-choice picker
+      if(p.isHuman){
+        const fuQty = countFaceUpRank(p, c.r);
+        const hQty  = countHandRank(p, c.r);
+        if(fuQty > 0 || hQty > 0){
+          const choice = await showRevealChoicePicker(c.r, fuQty, hQty);
+          if(choice){
+            let toAdd = choice.count - 1;
+
+            if(choice.useFU && fuQty > 0){
+              const takeFU = Math.min(fuQty, toAdd);
+              const extraFU = removeFaceUpOfRank(p, c.r, takeFU);
+              state.pile.push.apply(state.pile, extraFU);
+              state.currentCount += extraFU.length;
+              toAdd -= extraFU.length;
+            }
+
+            if(choice.useHand && hQty > 0 && toAdd > 0){
+              let moved = 0; const rest = [];
+              for(const x of p.hand){
+                if(x && moved < toAdd && x.r === c.r){ state.pile.push(x); moved++; }
+                else rest.push(x);
+              }
+              p.hand = rest;
+              state.currentCount += moved;
+            }
+          }
+        }
+      } else {
+        // AI can automatically add all same-rank extras (unchanged)
+        const canFU = removeFaceUpOfRank(p, c.r, 99);
+        if(canFU.length){
+          state.pile.push.apply(state.pile, canFU);
+          state.currentCount += canFU.length;
+        }
+        let addH = [], rest = [];
+        for(const x of p.hand){ if(x && x.r === c.r) addH.push(x); else rest.push(x); }
+        p.hand = rest;
+        if(addH.length){
+          state.pile.push.apply(state.pile, addH);
+          state.currentCount += addH.length;
+        }
+      }
+
+      if(state.currentCount >= 4){
+        const snap2 = state.pile.slice();
+        await maybePauseBefore('clear', snap2, p.name);
+        await clearPile(p, c.r+' reached '+state.currentCount);
+        if(hasCards(p)) return enableHumanChoices();
+      }
+    }
+
+    maybeDeclare(p);
+    logBoardState();
+    endOrNext();
+  } finally {
+    if(isHuman) state.uiLock = false;   // ← always release the lock
   }
-  maybeDeclare(p); logBoardState(); endOrNext(); }
+}
 
 // ===== Clear / Turn =====
 async function clearPile(byPlayer,reason){ if(state.pile.length){ const pileBefore=state.pile.slice(); logAction(byPlayer.name+' clears the pile ('+reason+').',{snapshotCards:pileBefore}); state.pile.length=0; } state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(200); }
