@@ -239,3 +239,14 @@ button, .card.playable{ touch-action: manipulation }
     display: flex; /* same as your .row default */
   }
 }
+
+/* Mobile-only row in Settings: hidden on desktop, shown on mobile */
+.modal .row.mobile-only {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .modal .row.mobile-only {
+    display: flex; /* same as your .row */
+  }
+}
