@@ -110,13 +110,10 @@ function render(){
     area.append(hdr);
 
     const slotRow = document.createElement('div');
+    slotRow.className = 'slotRow';
     slotRow.style.display = 'grid';
     slotRow.style.gridTemplateColumns = 'repeat(4, 56px)';
     // 👉 Increase spacing ONLY for the human player's table on mobile
-    slotRow.style.gap = (p.isHuman && isMobile) ? '16px' : '12px';
-    // Margin below the grid — human/mobile spacing comes mainly from CSS rule on the next section,
-    // so keep this neutral and consistent:
-    slotRow.style.marginBottom = '12px';
 
     p.slots.forEach((s, slotIdx) => {
       const col = document.createElement('div');

@@ -1,5 +1,15 @@
 #runTests.dev{ display:inline-block !important; }
-:root{ --felt:#0a5a3c; --felt-dark:#084a33; --gold:#f0c36a; --ivory:#f9f6ee; --ink:#1b1b1b; --accent:#e7b553; }
+:root{
+  --felt:#0a5a3c;
+  --felt-dark:#084a33;
+  --gold:#f0c36a;
+  --ivory:#f9f6ee;
+  --ink:#1b1b1b;
+  --accent:#e7b553;
+
+  /* Single knob for mobile spacing (your table) */
+  --me-mobile-table-space: 20px;
+}
 html,body{height:100%}
 body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; background: radial-gradient(1000px 600px at 50% 20%, var(--felt), var(--felt-dark)); color: var(--ivory); overflow-x:hidden; }
 .table{max-width: 1200px; margin: 0 auto; padding: 16px 16px 160px; position: relative;}
@@ -201,5 +211,19 @@ button, .card.playable{ touch-action: manipulation }
   #human .section + .section{
     /* was ~22px; give it a lot more air */
     margin-top: clamp(32px, 6vw, 48px) !important;
+  }
+}
+
+/* Apply the single spacing value to YOUR table on mobile */
+@media (max-width: 600px){
+  /* spacing BETWEEN your 4 table cards */
+  #human .slotRow{
+    gap: var(--me-mobile-table-space) !important;
+  }
+
+  /* extra space BELOW your table and ABOVE "Your Hand" */
+  #human .slotRow{
+    gap: var(--me-mobile-table-space) !important;
+    margin-bottom: calc(var(--me-mobile-table-space) * 2) !important;
   }
 }
