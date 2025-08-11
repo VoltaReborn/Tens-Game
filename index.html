@@ -1,21 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Your Game</title>
-
-    <!-- Link to CSS -->
-    <link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tens – Card Game</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div class="table">
+    <h1>Tens</h1>
+    <p class="sub">Goal: shed all cards in hand and on the table (face-up then face-down). Clearing happens on any <b>10</b> or when the current value count reaches <b>4+</b>. Higher-than-last forces a pickup first. After a clear, <b>the same player continues</b>.</p>
 
-    <!-- Your game container -->
-    <div id="game-container">
-        <!-- Game UI will go here -->
+    <div class="controls">
+      <label>Players
+        <select id="playerCount">
+          <option value="2">2 (you + 1 AI)</option>
+          <option value="3" selected>3 (you + 2 AI)</option>
+          <option value="4">4 (you + 3 AI)</option>
+          <option value="5">5 (you + 4 AI)</option>
+          <option value="6">6 (you + 5 AI)</option>
+        </select>
+      </label>
+      <label>AI Difficulty
+        <select id="aiDifficulty">
+          <option value="easy" selected>Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="expert">Expert</option>
+          <option value="adaptive">Adaptive (per round)</option>
+          <option value="lose">Tries to lose 🤡</option>
+        </select>
+      </label>
+      <button id="newRound" class="primary">Start New Game</button>
+      <button id="newGame">Forfeit Game</button>
+      <button id="runTests" style="display:none">Run Rule Tests</button>
+      <button id="settingsBtn">Settings</button>
+      <button id="hintBtn">Hint</button>
+      <span class="hint">Match ends when someone hits 150+ points.</span>
     </div>
 
-    <!-- Link to JavaScript -->
-    <script src="script.js"></script>
+    <div class="board">
+      <div class="lane"><div class="playerArea panel" id="aiTop"></div></div>
+      <div>
+        <div class="pile" id="centerPile">
+          <h3>Center Pile</h3>
+          <div id="pileInfo" class="hint">—</div>
+          <div class="stack" id="pileStack"></div>
+        </div>
+        <div class="panel" id="logWrap" style="margin-top:10px">
+          <h3 style="display:flex;align-items:center;gap:10px">
+            Log
+            <label style="margin-left:auto;display:flex;align-items:center;gap:6px;font-weight:500;font-size:12px;opacity:.9">Show snapshots <input type="checkbox" id="logSnapshots"></label>
+          </h3>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+      <div class="lane"><div class="playerArea panel me" id="human"></div></div>
+    </div>
+  </div>
+
+  <div class="scorebar collapsed" id="scorebar">
+    <button id="scoreToggle" title="Toggle status">Info ▾</button>
+    <div class="scores" id="scores"></div>
+    <div style="margin-left:auto" id="status"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="picker" id="picker"></div>
+
+  <div id="miniPile"><h4>Pile</h4><div id="miniInfo">—</div><div class="stack" id="miniStack"></div><div id="miniMore"></div></div>
+  <div class="miniAnchor" id="miniAnchor">◻︎</div>
+
+  <!-- Settings modal -->
+  <div class="modal" id="settingsModal">
+    <div class="backdrop"></div>
+    <div class="content">
+      <h3>Settings</h3>
+      <div class="row"><span>Pause before board clear</span><input type="checkbox" id="setPauseBefore"></div>
+      <div class="row"><span>Warn when an <b>AI</b> player has ≤ <input id="setWarnThresh" type="number" min="1" max="30" value="5" style="width:60px"> cards</span><input type="checkbox" id="setWarnOn"></div>
+      <div class="row"><span>Show suits</span><input type="checkbox" id="setSuits"></div>
+      <div class="row"><span>Tap mini pile to hide/show</span><input type="checkbox" id="setMiniTap"></div>
+      <div class="row"><span>Card back</span>
+        <select id="setCardBack">
+          <option value="blueflame">Blue Flame</option>
+          <option value="wave">Blue Wave</option>
+          <option value="classic">Solid Blue</option>
+        </select>
+      </div>
+      <div class="actions"><button id="setCancel">Cancel</button><button class="primary" id="setSave">Save</button></div>
+    </div>
+  </div>
+
+  <!-- Round summary modal -->
+  <div class="modal" id="roundModal">
+    <div class="backdrop"></div>
+    <div class="content">
+      <h3 id="roundTitle">Round complete!</h3>
+      <div id="roundBody"></div>
+      <div class="actions"><button class="primary" id="roundOk">Start Next Round</button></div>
+    </div>
+  </div>
+
+  <!-- Hint modal -->
+  <div class="modal" id="hintModal">
+    <div class="backdrop"></div>
+    <div class="content">
+      <h3>Suggested play</h3>
+      <div id="hintBody" style="margin:8px 0 4px"></div>
+      <div class="actions"><button id="hintClose" class="primary">✕</button></div>
+    </div>
+  </div>
+
+  <script src="script.js" defer></script>
 </body>
 </html>
