@@ -105,14 +105,25 @@
 </div>
 
 <!-- Round summary modal -->
-  <div class="modal" id="roundModal">
-    <div class="backdrop"></div>
-    <div class="content">
-      <h3 id="roundTitle">Round complete!</h3>
-      <div id="roundBody"></div>
-      <div class="actions"><button class="primary" id="roundOk">Start Next Round</button></div>
+<div class="modal" id="roundModal">
+  <div class="backdrop"></div>
+  <div class="content">
+    <h3 id="roundTitle">Round complete!</h3>
+    <div id="roundBody"></div>
+
+    <!-- Final scores (only visible when match is over) -->
+    <div id="finalScores" style="display:none; margin-top:10px"></div>
+
+    <div class="actions" id="roundActions">
+      <!-- When match is ongoing, we show only "Start Next Round" -->
+      <!-- When match is over, we show: "Start New Game" + "View Board" -->
+      <button class="primary" id="roundOk">Start Next Round</button>
+      <button class="primary" id="roundStartNew" style="display:none">Start New Game</button>
+      <button id="roundViewBoard" style="display:none">View Board</button>
     </div>
   </div>
+</div>
+
 
   <!-- Hint modal -->
   <div class="modal" id="hintModal">

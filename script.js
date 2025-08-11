@@ -72,31 +72,20 @@ function resetMatch(){ state.players.forEach(p=>p.score=0); state.dealer=-1; sta
 
 // ===== Deal (ensure 11 hand + 4 up/4 down) =====
 // Build exactly the number of cards needed: players * 19.
-// Use ceil(need/52) decks; include full decks first, then only the needed
-// cards from the last deck so any "leftover" comes from ONE deck (the last).
 function ensureDeckSizeFor(nPlayers){
-  const needEach = 11 + 8;           // 19 per player
+  const needEach = 11 + 8;                // 19 per player
   const needTotal = nPlayers * needEach;
-  const FULL = 52;
+  const decksNeeded = Math.ceil(needTotal / 52);
 
-  const decksNeeded = Math.ceil(needTotal / FULL);
-  const gameDeck = [];
+  // Build a combined shoe of N full decks, fully shuffled
+  // (You already have makeDeck(n) that returns n full decks shuffled together)
+  const shoe = makeDeck(decksNeeded);     // length = decksNeeded * 52
 
-  // Add full shuffled decks (decksNeeded - 1)
-  for(let i=0; i<Math.max(0, decksNeeded - 1); i++){
-    const d = makeDeck(1);           // one full deck, shuffled
-    gameDeck.push(...d);
-  }
-
-  // Add only as many as we still need from the last deck
-  const lastNeed = needTotal - gameDeck.length;
-  if(lastNeed > 0){
-    const last = makeDeck(1);        // another single deck, shuffled
-    gameDeck.push(...last.slice(0, lastNeed));
-  }
-
-  return gameDeck;                   // exactly needTotal cards
+  // We’ll deal exactly needTotal cards from the end with .pop()
+  // Remaining cards in `shoe` are not used (excluded from the game)
+  return shoe;
 }
+
 function dealRound(){ const d=ensureDeckSizeFor(state.players.length); for(const p of state.players){ p.hand=[]; p.slots=[]; }
   for(const p of state.players){ for(let i=0;i<4;i++){ const down=d.pop(); const up=d.pop(); p.slots.push({down,up}); } }
   for(const p of state.players){ for(let i=0;i<11;i++){ p.hand.push(d.pop()); } }
@@ -709,85 +698,168 @@ async function aiTakeTurn(p, chain){
 
 // ===== Scoring / Rounds =====
 async function scoreRound(finisher){
-  state.roundActive = false;
+  state.roundActive=false;
+
+  // Tally this round’s points into match scores
   const pts = state.players.map(function(p){
-    let s = 0;
-    p.hand.forEach(function(c){ if(!c) return; s += scoringValue(c.r); });
-    faceUpCards(p).forEach(function(c){ s += scoringValue(c.r); });
-    p.slots.forEach(function(sl){ if(sl && sl.down) s += scoringValue(sl.down.r); });
+    let s=0;
+    p.hand.forEach(function(c){ if(!c) return; s+=scoringValue(c.r); });
+    faceUpCards(p).forEach(function(c){ s+=scoringValue(c.r); });
+    p.slots.forEach(function(sl){ if(sl&&sl.down) s+=scoringValue(sl.down.r); });
     return s;
   });
   pts.forEach(function(s,i){ state.players[i].score += s; });
-  log('Round ended. ' + finisher.name + ' went out. Scoring applied.');
+
+  log('Round ended. '+finisher.name+' went out. Scoring applied.');
   updateScores();
 
+  // Show the round modal (and possibly final scores)
   await showEndOfRoundModal(finisher, pts);
 
   const over = state.players.find(function(pp){ return pp.score >= 150; });
-  if (over) {
+  if(over){
     state.matchActive = false;
-    const winner = [...state.players].sort(function(a,b){return a.score - b.score;})[0];
-    toast('Match Over! Winner: ' + winner.name + ' (' + winner.score + ')');
-    document.getElementById('status').textContent = 'Match Over — Winner: ' + winner.name;
-    const btn = document.getElementById('newRound');
-    btn.disabled = false; btn.title = '';
+    const sorted = [...state.players].sort((a,b)=>a.score - b.score);
+    const winner = sorted[0];
+    const winnerIsYou = winner.isHuman || /^you$/i.test(winner.name);
+    const toastText = winnerIsYou ? 'Match Over! Winner: You' : ('Match Over! Winner: '+winner.name);
+    toast(toastText);
+    document.getElementById('status').textContent = winnerIsYou ? 'Match Over — Winner: You' : ('Match Over — Winner: ' + winner.name);
+
+    // Enable the Start New Game button in controls
+    const btn=document.getElementById('newRound');
+    btn.disabled=false;
+    btn.title='';
     render();
     return;
   }
 
-  if (getSelectedDifficulty() === 'adaptive'){
-    const meScore = state.players[0].score;
-    const minScore = Math.min.apply(null, state.players.map(function(p){return p.score;}));
-    const ladder = ['easy','medium','hard','expert']; let idx = ladder.indexOf(state.aiAdaptive); if(idx<0) idx=1;
-    if (meScore === minScore && idx < ladder.length - 1) idx++;
-    else if (meScore > minScore && idx > 0) idx--;
-    state.aiAdaptive = ladder[idx];
-    log('AI difficulty (Adaptive) adjusted to: ' + state.aiAdaptive);
+  // Prepare next round automatically
+  if(getSelectedDifficulty()==='adaptive'){
+    const meScore = state.players[0].score; const minScore = Math.min.apply(null,state.players.map(function(p){return p.score;}));
+    const ladder=['easy','medium','hard','expert']; let idx=ladder.indexOf(state.aiAdaptive); if(idx<0) idx=1;
+    if(meScore===minScore && idx<ladder.length-1) idx++; else if(meScore>minScore && idx>0) idx--; state.aiAdaptive = ladder[idx];
+    log('AI difficulty (Adaptive) adjusted to: '+state.aiAdaptive);
   }
 
   nextDealer();
   dealRound();
-  document.getElementById('status').textContent = 'New round. ' + state.players[state.turn].name + ' to play.';
-  const starter = state.players[state.turn];
-  log('New round begins. Dealer: ' + state.players[state.dealer].name + '. ' + (starter.isHuman ? 'You start.' : (starter.name + ' starts.')));
+  document.getElementById('status').textContent='New round. '+state.players[state.turn].name+' to play.';
+  log('New round begins. Dealer: '+state.players[state.dealer].name+'. '+state.players[state.turn].name+' starts.');
   render();
-  if (!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]);
+  if(!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]);
 }
+
 function updateScores(){ const wrap=document.getElementById('scores'); wrap.innerHTML=''; state.players.forEach(function(p){ const d=document.createElement('div'); d.className='slot'; d.textContent=p.name+': '+p.score; wrap.append(d); }); }
 function forfeitMatch(){ if(!state.roundActive && !state.matchActive) return; state.roundActive=false; state.matchActive=false; document.getElementById('status').textContent='You forfeited. Match ended.'; log('You forfeited. Match ended.'); const btn=document.getElementById('newRound'); btn.disabled=false; btn.title=''; render(); }
 
-function showEndOfRoundModal(finisher, roundPoints){ return new Promise(function(resolve){
-  const modal=document.getElementById('roundModal'); const body=document.getElementById('roundBody'); const title=document.getElementById('roundTitle'); const ok=document.getElementById('roundOk'); body.innerHTML='';
-  const matchOver = state.players.some(function(p){return p.score>=150;});
-  title.textContent = matchOver ? ('Match Over! '+([...state.players].sort(function(a,b){return a.score-b.score;})[0]).name+' wins!') : ('Round complete! '+finisher.name+' went out!');
+function showEndOfRoundModal(finisher, roundPoints){
+  return new Promise(function(resolve){
+    const modal = document.getElementById('roundModal');
+    const body  = document.getElementById('roundBody');
+    const title = document.getElementById('roundTitle');
+    const okBtn = document.getElementById('roundOk');
+    const startNewBtn = document.getElementById('roundStartNew');
+    const viewBoardBtn = document.getElementById('roundViewBoard');
+    const finalScoresBox = document.getElementById('finalScores');
+    const actions = document.getElementById('roundActions');
 
-  let maxP=-1, minP=Infinity; state.players.forEach(function(p){ const v=(state.roundStats.pickups.get(p.id)||0); maxP=Math.max(maxP,v); minP=Math.min(minP,v); });
+    body.innerHTML = '';
+    finalScoresBox.innerHTML = '';
+    finalScoresBox.style.display = 'none';
 
-  const acc=document.createElement('div'); acc.className='accordion';
-  state.players.forEach(function(p,idx){
-    const item=document.createElement('div'); item.className='item';
-    const head=document.createElement('h4'); const pts=roundPoints[idx];
-    const badges=document.createElement('span');
-    const pc=(state.roundStats.pickups.get(p.id)||0);
-    if(pc===maxP && maxP>0){ const ch=document.createElement('span'); ch.className='badgeChip'; ch.title='Picked up the pile the most times this round'; ch.textContent='I want that pile!'; badges.append(ch); }
-    if(pc===minP){ const ch2=document.createElement('span'); ch2.className='badgeChip'; ch2.style.marginLeft='6px'; ch2.title='Picked up the pile the fewest times this round'; ch2.textContent='Keep that pile away from me!'; badges.append(ch2); }
-    head.innerHTML = p.name+' — <b>'+pts+' pts</b>'; head.append(badges); item.append(head);
+    // Build accordion of end-of-round hands (unchanged from your previous logic)
+    let maxP=-1, minP=Infinity;
+    state.players.forEach(function(p){ const v=(state.roundStats.pickups.get(p.id)||0); maxP=Math.max(maxP,v); minP=Math.min(minP,v); });
 
-    const bodyRow=document.createElement('div'); bodyRow.style.display='none';
-    const sec=function(label,cards){ const wrap=document.createElement('div'); const h=document.createElement('div'); h.textContent=label; h.style.margin='6px 0'; wrap.append(h); const st=document.createElement('div'); st.className='stack'; cards.forEach(function(c){ st.append(makeCardEl(c,true,false)); }); wrap.append(st); bodyRow.append(wrap); };
-    const hand=p.hand.slice(); const fu=faceUpCards(p); const fd=p.slots.map(function(s){return s&&s.down;}).filter(Boolean);
-    if(idx===0){ bodyRow.style.display='block'; }
-    sec('Hand',hand); sec('Face-up',fu); sec('Face-down',fd);
+    const acc=document.createElement('div'); acc.className='accordion';
+    state.players.forEach(function(p,idx){
+      const item=document.createElement('div'); item.className='item';
+      const head=document.createElement('h4'); const pts=roundPoints[idx];
+      const badges=document.createElement('span');
+      const pc=(state.roundStats.pickups.get(p.id)||0);
+      if(pc===maxP && maxP>0){
+        const ch=document.createElement('span'); ch.className='badgeChip'; ch.title='Picked up the pile the most times this round'; ch.textContent='I want that pile!'; badges.append(ch);
+      }
+      if(pc===minP){
+        const ch2=document.createElement('span'); ch2.className='badgeChip'; ch2.style.marginLeft='6px'; ch2.title='Picked up the pile the fewest times this round'; ch2.textContent='Keep that pile away from me!'; badges.append(ch2);
+      }
+      head.innerHTML = p.name+' — <b>'+pts+' pts</b>';
+      head.append(badges);
+      item.append(head);
 
-    head.addEventListener('click',function(){ bodyRow.style.display = bodyRow.style.display==='none' ? 'block' : 'none'; });
-    item.append(bodyRow);
-    acc.append(item);
+      const bodyRow=document.createElement('div'); bodyRow.style.display='none';
+      const sec=function(label,cards){
+        const wrap=document.createElement('div');
+        const h=document.createElement('div'); h.textContent=label; h.style.margin='6px 0'; wrap.append(h);
+        const st=document.createElement('div'); st.className='stack'; cards.forEach(function(c){ st.append(makeCardEl(c,true,false)); }); wrap.append(st);
+        bodyRow.append(wrap);
+      };
+      const hand=p.hand.slice(); const fu=faceUpCards(p); const fd=p.slots.map(function(s){return s&&s.down;}).filter(Boolean);
+      if(idx===0){ bodyRow.style.display='block'; }
+      sec('Hand',hand); sec('Face-up',fu); sec('Face-down',fd);
+
+      head.addEventListener('click',function(){ bodyRow.style.display = bodyRow.style.display==='none' ? 'block' : 'none'; });
+      item.append(bodyRow);
+      acc.append(item);
+    });
+    body.append(acc);
+
+    const matchOver = state.players.some(function(p){return p.score>=150;});
+    if(matchOver){
+      // Winner is lowest score
+      const sorted = [...state.players].map(p => ({name:p.name, score:p.score, isHuman:!!p.isHuman}))
+        .sort((a,b)=>a.score - b.score);
+      const winner = sorted[0];
+
+      // Title grammar: "You win!" vs "<Name> wins!"
+      const winnerText = winner.isHuman || /^you$/i.test(winner.name) ? 'You win!' : (winner.name + ' wins!');
+      title.textContent = 'Match Over! ' + winnerText;
+
+      // Final scores (ranked)
+      const list = document.createElement('div');
+      list.style.marginTop = '8px';
+      sorted.forEach((p, idx) => {
+        const line = document.createElement('div');
+        const place = (idx===0?'1st':idx===1?'2nd':idx===2?'3rd':(idx+1)+'th');
+        line.innerHTML = `<b>${place}</b> — ${p.name}: ${p.score}`;
+        list.append(line);
+      });
+      finalScoresBox.append(list);
+      finalScoresBox.style.display = 'block';
+
+      // Buttons: Start New Game + View Board
+      okBtn.style.display = 'none';
+      startNewBtn.style.display = '';
+      viewBoardBtn.style.display = '';
+
+      startNewBtn.onclick = function(){
+        modal.style.display = 'none';
+        // Start a brand new game with current player count
+        startNewRound();
+        resolve();
+      };
+      viewBoardBtn.onclick = function(){
+        modal.style.display = 'none';
+        resolve();
+      };
+    } else {
+      // Ongoing match: normal next-round button
+      title.textContent = 'Round complete! ' + finisher.name + ' went out!';
+      okBtn.textContent = 'Start Next Round';
+      okBtn.style.display = '';
+      startNewBtn.style.display = 'none';
+      viewBoardBtn.style.display = 'none';
+
+      okBtn.onclick = function(){
+        modal.style.display = 'none';
+        resolve();
+      };
+    }
+
+    modal.style.display='flex';
   });
-  body.append(acc);
-  ok.textContent = matchOver ? 'Start New Game' : 'Start Next Round';
-  ok.onclick=function(){ modal.style.display='none'; resolve(); };
-  modal.style.display='flex';
-  }); }
+}
 
 // ===== Hint =====
 // Return exactly what Expert AI would choose for the human (no side effects).
