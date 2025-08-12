@@ -759,17 +759,28 @@ async function tryFlipFaceDownSlot(slotIdx){
 // --- Unified clear animation helper (main pile + mini pile) ---
 function animatePileClear(type){
   const mode = type || 'fade';
-  if (mode === 'none') return; // no animation at all
+  if (mode === 'none') return;
 
-  const stacks = [
-    document.getElementById('pileStack'),
-    document.getElementById('miniStack')
-  ].filter(Boolean);
+  const pileStackEl = document.getElementById('pileStack');
+  const miniStackEl = document.getElementById('miniStack');
+
+  function isVisible(el){
+    if (!el) return false;
+    const cs = getComputedStyle(el);
+    return cs.display !== 'none' && cs.visibility !== 'hidden' && el.getClientRects().length > 0;
+  }
+
+  // Prefer animating from the floating mini pile on mobile if it's actually visible.
+  const stacks = [miniStackEl, pileStackEl].filter(isVisible);
+  if (!stacks.length) return; // nothing on screen to animate
 
   const sprites = [];
 
   stacks.forEach(stack=>{
-    const cards = Array.from(stack.querySelectorAll('.card'));
+    // Only clone visible, laid-out cards (avoids 0x0 sprites from display:none)
+    const cards = Array.from(stack.querySelectorAll('.card'))
+      .filter(el => el.getClientRects().length > 0);
+
     if (!cards.length) return;
 
     cards.forEach(src=>{
@@ -777,8 +788,8 @@ function animatePileClear(type){
       const sp = document.createElement('div');
       sp.className = 'card';
       sp.style.position = 'fixed';
-      sp.style.left = (r.left + window.scrollX) + 'px';
-      sp.style.top  = (r.top  + window.scrollY) + 'px';
+      sp.style.left = r.left + 'px';
+      sp.style.top  = r.top  + 'px';
       sp.style.width  = r.width + 'px';
       sp.style.height = r.height + 'px';
       sp.style.zIndex = 9999;
@@ -787,10 +798,18 @@ function animatePileClear(type){
       sp.textContent = src.textContent;
       if (src.classList.contains('red')) sp.classList.add('red');
 
-      // start state (no bolding/contrast pre-style)
+      // start state (match source transform if it has one, e.g. mini pile scale)
       sp.style.opacity = '1';
-      sp.style.transform = 'translate(0,0) rotate(0deg)';
-      sp.style.filter = 'none';
+      sp.style.filter  = 'none';
+
+const srcComputed = getComputedStyle(src);
+if (srcComputed.transform && srcComputed.transform !== 'none') {
+  // e.g., mini pile uses transform: scale(.9) via CSS
+  sp.style.transform = srcComputed.transform;
+} else {
+  sp.style.transform = 'translate(0,0) rotate(0deg)';
+}
+
 
       document.body.appendChild(sp);
       sprites.push(sp);
@@ -798,7 +817,7 @@ function animatePileClear(type){
   });
 
   // Helper to clean up
-  const cleanup = (ms=420)=> setTimeout(()=> sprites.forEach(n=> n.remove()), ms);
+  const cleanup = (ms=520)=> setTimeout(()=> sprites.forEach(n=> n.remove()), ms);
 
   // Thanos Snap: tile each sprite into particles and drift/fade
   if (mode === 'thanos'){
@@ -816,8 +835,8 @@ function animatePileClear(type){
         for (let x=0; x<cols; x++){
           const p = document.createElement('div');
           p.style.position   = 'fixed';
-          p.style.left       = (r.left + window.scrollX + x*PARTICLE) + 'px';
-          p.style.top        = (r.top  + window.scrollY + y*PARTICLE) + 'px';
+          p.style.left = (r.left + x*PARTICLE) + 'px';
+          p.style.top  = (r.top  + y*PARTICLE) + 'px';
           p.style.width      = PARTICLE + 'px';
           p.style.height     = PARTICLE + 'px';
           p.style.borderRadius = '2px';

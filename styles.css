@@ -335,12 +335,12 @@ button, .card.playable{ touch-action: manipulation }
 }
 
 /* ---------- CARD FACE (dark theme) ---------- */
-[data-cardface="dark"] .card{
+[data-cardface="dark"] .card:not(.faceDown){
   background: linear-gradient(180deg,#2a2a2a,#171717);
   color:#eee; border-color:#3a3a3a;
 }
 [data-cardface="dark"] .card.red{ color:#ff7a7a }
-[data-cardface="dark"] .card.small{ background: linear-gradient(180deg,#272727,#151515); }
+[data-cardface="dark"] .card.small:not(.faceDown){ background: linear-gradient(180deg,#272727,#151515); }
 
 /* ---------- RESPONSIVE ---------- */
 @media (max-width: 900px){
