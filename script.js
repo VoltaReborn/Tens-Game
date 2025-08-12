@@ -100,7 +100,8 @@ const state = {
   roundStats: null,
   aiAdaptive: 'medium',
   uiLock: false,           // ← lock human input during forced flows (e.g., blind flip)
-  roundHistory: []         // ← NEW: per-round points history [ [p0,p1,...], [p0,p1,...], ... ]
+  roundHistory: [],         // ← NEW: per-round points history [ [p0,p1,...], [p0,p1,...], ... ]
+  pickupsTotal: new Map(), 
 };
 
 function freshPlayers(n){
@@ -119,6 +120,7 @@ function resetMatch(){
   updateScores();
   state.warnedAt.clear();
   state.roundHistory = []; // ← reset stats history
+  state.pickupsTotal = new Map();
 }
 
 // ===== Deal (ensure 11 hand + 4 up/4 down) =====
@@ -669,11 +671,30 @@ async function tryFlipFaceDownSlot(slotIdx){
       else if(rv === state.currentValue){ state.currentCount += 1; }
       else { state.currentValue = rv; state.currentCount = 1; }
 
-      // Human may optionally add same-rank extras via the reveal-choice picker
-      if(isHuman){
+            // Human may add same-rank extras
+      if (isHuman){
+        const special = (c.r==='A' || c.r==='2' || c.r==='10');
         const fuQty = countFaceUpRank(p, c.r);
         const hQty  = countHandRank(p, c.r);
-        if(fuQty > 0 || hQty > 0){
+
+        if (settings.autoPlayCopies && !special){
+          // Auto: add ALL available from face-up and hand
+          if (fuQty > 0){
+            const extraFU = removeFaceUpOfRank(p, c.r, fuQty);
+            state.pile.push(...extraFU);
+            state.currentCount += extraFU.length;
+          }
+          if (hQty > 0){
+            let moved = 0, rest = [];
+            for (const x of p.hand){
+              if (x && x.r === c.r){ state.pile.push(x); moved++; }
+              else rest.push(x);
+            }
+            p.hand = rest;
+            state.currentCount += moved;
+          }
+        } else if (fuQty > 0 || hQty > 0){
+          // Manual picker (existing UX)
           const choice = await showRevealChoicePicker(c.r, fuQty, hQty);
           if(choice){
             let toAdd = choice.count - 1;
@@ -681,13 +702,13 @@ async function tryFlipFaceDownSlot(slotIdx){
             if(choice.useFU && fuQty > 0){
               const takeFU = Math.min(fuQty, toAdd);
               const extraFU = removeFaceUpOfRank(p, c.r, takeFU);
-              state.pile.push.apply(state.pile, extraFU);
+              state.pile.push(...extraFU);
               state.currentCount += extraFU.length;
               toAdd -= extraFU.length;
             }
 
             if(choice.useHand && hQty > 0 && toAdd > 0){
-              let moved = 0; const rest = [];
+              let moved = 0, rest = [];
               for(const x of p.hand){
                 if(x && moved < toAdd && x.r === c.r){ state.pile.push(x); moved++; }
                 else rest.push(x);
@@ -700,11 +721,11 @@ async function tryFlipFaceDownSlot(slotIdx){
       } else {
         // AI auto-adds all same-rank extras
         const canFU = removeFaceUpOfRank(p, c.r, 99);
-        if(canFU.length){ state.pile.push.apply(state.pile, canFU); state.currentCount += canFU.length; }
+        if(canFU.length){ state.pile.push(...canFU); state.currentCount += canFU.length; }
         let addH = [], rest = [];
         for(const x of p.hand){ if(x && x.r === c.r) addH.push(x); else rest.push(x); }
         p.hand = rest;
-        if(addH.length){ state.pile.push.apply(state.pile, addH); state.currentCount += addH.length; }
+        if(addH.length){ state.pile.push(...addH); state.currentCount += addH.length; }
       }
 
       // Four-or-more clears → same player must continue
@@ -957,18 +978,21 @@ function showEndOfRoundModal(finisher, roundPoints){
     const acc=document.createElement('div'); acc.className='accordion';
     state.players.forEach(function(p,idx){
       const item=document.createElement('div'); item.className='item';
-      const head=document.createElement('h4'); const pts=roundPoints[idx];
-      const badges=document.createElement('span');
-      const pc=(state.roundStats.pickups.get(p.id)||0);
-      if(pc===maxP && maxP>0){
-        const ch=document.createElement('span'); ch.className='badgeChip'; ch.title='Picked up the pile the most times this round'; ch.textContent='I want that pile!'; badges.append(ch);
-      }
-      if(pc===minP){
-        const ch2=document.createElement('span'); ch2.className='badgeChip'; ch2.style.marginLeft='6px'; ch2.title='Picked up the pile the fewest times this round'; ch2.textContent='Keep that pile away from me!'; badges.append(ch2);
-      }
-      head.innerHTML = p.name+' — <b>'+pts+' pts</b>';
-      head.append(badges);
+      const head = document.createElement('h4');
+      head.className = 'roundHead'; // grid/flex header
+      const pts = roundPoints[idx];
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'rh-name';
+      nameEl.textContent = p.name;
+
+      const ptsEl = document.createElement('span');
+      ptsEl.className = 'rh-pts';
+      ptsEl.innerHTML = `<b>${pts}</b> pts`;
+
+      head.append(nameEl, ptsEl);
       item.append(head);
+
 
       const bodyRow=document.createElement('div'); bodyRow.style.display='none';
       const sec=function(label,cards){
@@ -998,17 +1022,27 @@ function showEndOfRoundModal(finisher, roundPoints){
       const winnerText = winner.isHuman || /^you$/i.test(winner.name) ? 'You win!' : (winner.name + ' wins!');
       title.textContent = 'Match Over! ' + winnerText;
 
-      // Final scores (ranked)
-      const list = document.createElement('div');
-      list.style.marginTop = '8px';
+      const podium = document.createElement('div');
+      podium.className = 'podium';
+
       sorted.forEach((p, idx) => {
-        const line = document.createElement('div');
+        const entry = document.createElement('div');
+        entry.className = 'podium-entry';
+
+        const medal = idx===0 ? '🥇' : idx===1 ? '🥈' : idx===2 ? '🥉' : '🏅';
         const place = (idx===0?'1st':idx===1?'2nd':idx===2?'3rd':(idx+1)+'th');
-        line.innerHTML = `<b>${place}</b> — ${p.name}: ${p.score}`;
-        list.append(line);
+
+        entry.innerHTML = `
+          <div class="podium-medal" title="${place}">${medal}</div>
+          <div class="podium-name">${p.name}</div>
+          <div class="podium-score">${p.score}</div>
+        `;
+        podium.append(entry);
       });
-      finalScoresBox.append(list);
+
+      finalScoresBox.append(podium);
       finalScoresBox.style.display = 'block';
+
 
       // Buttons: Start New Game + View Board
       okBtn.style.display = 'none';
@@ -1086,6 +1120,18 @@ function openStatsModal(){
   sel.value = '0';
   drawFor(0);
 
+    // Totals area for pickups
+  let totalsBox = document.getElementById('statsTotals');
+  if(!totalsBox){
+    totalsBox = document.createElement('div');
+    totalsBox.id = 'statsTotals';
+    totalsBox.style.marginTop = '10px';
+    totalsBox.className = 'stats-totals';
+    chart.parentElement.appendChild(totalsBox);
+  }
+  renderPickupTotals(totalsBox);
+
+
   modal.style.display = 'flex';
 
   document.getElementById('statsClose').onclick = ()=>{ modal.style.display='none'; };
@@ -1121,6 +1167,14 @@ function renderLineChart(container, values){
     ${values.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="3" fill="currentColor"></circle>`).join('')}
   </svg>`;
   container.innerHTML = svg;
+}
+
+function renderPickupTotals(container){
+  const rows = state.players.map(p=>{
+    const n = state.pickupsTotal.get(p.id) || 0;
+    return `<div class="st-row"><span class="st-name">${p.name}</span><span class="st-val">${n}</span></div>`;
+  }).join('');
+  container.innerHTML = `<div class="st-title">Total pile pick-ups (match)</div>${rows}`;
 }
 
 // ===== Hint =====
@@ -1412,7 +1466,16 @@ function initMiniObserver(){
   window.addEventListener('touchend', onUp);
 }
 
-function incPickup(p){ const m=state.roundStats&&state.roundStats.pickups; if(!m) return; const prev=m.get(p.id)||0; m.set(p.id,prev+1); }
+function incPickup(p){
+  const m = state.roundStats && state.roundStats.pickups;
+  if (m){
+    const prev = m.get(p.id) || 0;
+    m.set(p.id, prev + 1);
+  }
+  // cumulative
+  const tot = state.pickupsTotal.get(p.id) || 0;
+  state.pickupsTotal.set(p.id, tot + 1);
+}
 
 // ===== Controls & Tests =====
 window.addEventListener('keydown',function(e){ if(e.key==='T' && e.shiftKey){ const b=document.getElementById('runTests'); if(b) b.classList.toggle('dev'); } });
