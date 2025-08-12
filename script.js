@@ -15,6 +15,7 @@ const settings = {
   pauseBefore:false, warnOn:false, warnThresh:5,
   showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false,
   showHintBtn:true,
+  clearAnim: 'instant',
   cardFaceTheme: 'classic',        // 'classic' | 'dark'
   autoPlayCopies:false,            // NEW: auto-play all copies except A/2/10
   // appearance
@@ -755,7 +756,100 @@ async function tryFlipFaceDownSlot(slotIdx){
 }
 
 // ===== Clear / Turn =====
-async function clearPile(byPlayer,reason){ if(state.pile.length){ const pileBefore=state.pile.slice(); logAction(byPlayer.name+' clears the pile ('+reason+').',{snapshotCards:pileBefore}); state.pile.length=0; } state.currentValue=null; state.currentCount=0; render(); logBoardState(); await sleep(200); }
+// ---- Pile clear animations ----
+// ---- Pile clear animations (scoped to a stack element) ----
+function animatePileClear(stackEl, type = 'instant', duration = 600){
+  return new Promise(resolve=>{
+    if (!stackEl || type === 'instant') return resolve();
+
+    const cards = Array.from(stackEl.querySelectorAll('.card'));
+    if (!cards.length) return resolve();
+
+    const rect = stackEl.getBoundingClientRect();
+
+    // Overlay only over the stack area (so it won't cover the floating mini pile)
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.left = rect.left + 'px';
+    overlay.style.top = rect.top + 'px';
+    overlay.style.width = rect.width + 'px';
+    overlay.style.height = rect.height + 'px';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '9999';
+    document.body.appendChild(overlay);
+
+    const sprites = cards.map(src=>{
+      const r = src.getBoundingClientRect();
+      const sp = src.cloneNode(true);
+      sp.style.position = 'absolute';
+      sp.style.left = (r.left - rect.left) + 'px';
+      sp.style.top  = (r.top  - rect.top)  + 'px';
+      sp.style.margin = '0';
+      sp.style.transformOrigin = '50% 50%';
+      sp.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease, filter ${duration}ms ease`;
+      overlay.appendChild(sp);
+      return sp;
+    });
+
+    // Kick off animation next frame
+    requestAnimationFrame(()=>{
+      sprites.forEach((sp)=>{
+        if (type === 'slide'){
+          sp.style.transform = `translateX(220px) rotate(6deg)`;
+          sp.style.opacity = '0';
+        } else if (type === 'fade'){
+          sp.style.opacity = '0';
+        } else if (type === 'dissolve'){
+          sp.style.opacity = '0';
+          sp.style.transform = 'scale(0.2)';
+          sp.style.filter = 'blur(2px)';
+        } else if (type === 'explode'){
+          const angle = (Math.random() * 360) | 0;
+          const dist  = 120 + Math.random()*120;
+          const dx = Math.cos(angle * Math.PI/180) * dist;
+          const dy = Math.sin(angle * Math.PI/180) * dist;
+          sp.style.transform = `translate(${dx}px, ${dy}px) rotate(${(dx+dy)%45}deg)`;
+          sp.style.opacity = '0';
+        } else {
+          sp.style.opacity = '0';
+        }
+      });
+    });
+
+    setTimeout(()=>{
+      overlay.remove();
+      resolve();
+    }, duration + 20);
+  });
+}
+
+async function clearPile(byPlayer, reason){
+  if (state.pile.length){
+    const pileBefore = state.pile.slice();
+    logAction(byPlayer.name + ' clears the pile (' + reason + ').', {snapshotCards: pileBefore});
+
+    // Animate both stacks before clearing state
+    const mainStack = document.getElementById('pileStack');
+    const miniStack = document.getElementById('miniStack');
+    const animType  = settings.clearAnim || 'instant';
+
+    try{
+      await Promise.all([
+        animatePileClear(mainStack, animType, 600),
+        animatePileClear(miniStack, animType, 600)
+      ]);
+    }catch(e){ /* fall back to instant */ }
+
+    state.pile.length = 0;
+  }
+
+  state.currentValue = null;
+  state.currentCount = 0;
+  render();
+  logBoardState();
+  await sleep(200);
+}
+
 function endOrNext(){ render(); const finisher=state.players.find(function(pp){return !hasCards(pp);}); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
 
 // ===== AI =====
@@ -1552,8 +1646,9 @@ function openSettings(){
   const ap = document.getElementById('setAutoPlayAll');
   ap.checked = !!settings.autoPlayCopies;
   ap.onchange = ()=>{ settings.autoPlayCopies = ap.checked; saveSettings(); };
+  const ca = document.getElementById('setClearAnim');
 
-    // ----- Card face theme chips -----
+  // ----- Card face theme chips -----
   const cfClassic = document.getElementById('cfClassic');
   const cfDark    = document.getElementById('cfDark');
   function paintCF(){
@@ -1572,6 +1667,8 @@ function openSettings(){
   mt.checked = !!settings.miniTap;
   sh.checked = !!settings.showHintBtn;
   ap.checked = !!settings.autoPlayCopies;
+  if (ca) ca.value = settings.clearAnim || 'instant';
+
 
   // auto-save handlers
   p.onchange = ()=>{ settings.pauseBefore = p.checked; saveSettings(); };
@@ -1581,6 +1678,7 @@ function openSettings(){
   mt.onchange= ()=>{ settings.miniTap     = mt.checked; saveSettings(); };
   sh.onchange= ()=>{ settings.showHintBtn = sh.checked; saveSettings(); render(); };
   ap.onchange= ()=>{ settings.autoPlayCopies = ap.checked; saveSettings(); };
+  if (ca) ca.onchange = ()=>{ settings.clearAnim = ca.value; saveSettings(); };
 
   // ===== TABLE COLOR =====
   const presetWrap = document.getElementById('tablePresetChips');

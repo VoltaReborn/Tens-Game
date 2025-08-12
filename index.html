@@ -89,6 +89,16 @@
   <div class="sectionTitle">Gameplay</div>
   <div class="row"><span>Pause before board clear</span><label class="switch"><input type="checkbox" id="setPauseBefore"><i></i></label></div>
   <div class="row">
+  <span>Pile clear animation</span>
+  <select id="setClearAnim">
+    <option value="instant">Disappear instantly</option>
+    <option value="slide">Slide off pile</option>
+    <option value="fade">Fade off pile</option>
+    <option value="dissolve">Dissolve</option>
+    <option value="explode">Explode</option>
+  </select>
+  </div>
+  <div class="row">
     <span>Warn when an <b>AI</b> player has ≤ <input id="setWarnThresh" type="number" min="1" max="30" value="5" class="themed-input-narrow"> cards</span>
     <label class="switch"><input type="checkbox" id="setWarnOn"><i></i></label>
   </div>
