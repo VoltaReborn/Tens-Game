@@ -1629,35 +1629,23 @@ function openSettings(){
       // Customs as chips
       settings.tableCustomColors.forEach(hex => presetWrap.appendChild(quickChip(hex)));
     } else {
-  // Edit mode: keep colored chips; click the colored box to apply.
-  PRESETS.forEach(p=>{
-    const item = document.createElement('div');
-    item.className='chip-item';
+  // EDIT MODE
+  // 1) Keep PRESETS looking exactly like non-edit (plain colored chips you can click)
+  PRESETS.forEach(p => presetWrap.appendChild(quickChip(p.hex)));
 
-    const box = document.createElement('div');
-    box.className='chip-box';
-    box.style.background = p.hex;
-    box.title = p.hex;
-    box.onclick = ()=> applyTable(p.hex); // colored box = use
-
-    const tools = document.createElement('div');
-    tools.className='chip-tools';
-    // No buttons for presets in edit mode
-
-    item.append(box, tools);
-    presetWrap.appendChild(item);
-  });
-
+  // 2) For CUSTOM colors, show colored box (click to use) + small Edit/Delete buttons
   settings.tableCustomColors.forEach((hex, idx)=>{
     const item = document.createElement('div');
     item.className='chip-item';
 
+    // colored box (acts as "use")
     const box = document.createElement('div');
     box.className='chip-box';
     box.style.background = hex;
     box.title = hex;
-    box.onclick = ()=> applyTable(hex); // colored box = use
+    box.onclick = ()=> applyTable(hex);
 
+    // tools (Edit / Delete)
     const tools = document.createElement('div');
     tools.className='chip-tools';
 
