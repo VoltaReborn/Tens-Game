@@ -15,15 +15,14 @@ const settings = {
   pauseBefore:false, warnOn:false, warnThresh:5,
   showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false,
   showHintBtn:true,
-  clearAnim: 'instant',
+  clearAnim: 'none',               // 'none'|'fade'|'slide'|'dissolve'|'invertfade'|'explode'|'thanos'
   cardFaceTheme: 'classic',        // 'classic' | 'dark'
-  autoPlayCopies:false,            // NEW: auto-play all copies except A/2/10
-  // appearance
-  tableColor:'#0a5a3c',            // NEW: felt base
-  tableFavorites:[],               // NEW
+  autoPlayCopies:false,            
+  tableColor:'#0a5a3c', 
+  tableFavorites:[],
   cardBack:'solid-blue',
-  cardBackFavorites:[],            // NEW: array of {bg:string} (CSS background)
-  cardBackCustomBg:''              // NEW: holds current custom background when using custom
+  cardBackFavorites:[],            
+  cardBackCustomBg:''         
 };
 
 function loadSettings(){
@@ -757,8 +756,11 @@ async function tryFlipFaceDownSlot(slotIdx){
 
 // ===== Clear / Turn =====
 // ---- Pile clear animations ----
-// --- Clear animation helper (main pile + mini pile), uses viewport-fixed sprites ---
+// --- Unified clear animation helper (main pile + mini pile) ---
 function animatePileClear(type){
+  const mode = type || 'fade';
+  if (mode === 'none') return; // no animation at all
+
   const stacks = [
     document.getElementById('pileStack'),
     document.getElementById('miniStack')
@@ -781,68 +783,114 @@ function animatePileClear(type){
       sp.style.height = r.height + 'px';
       sp.style.zIndex = 9999;
       sp.style.pointerEvents = 'none';
-      sp.style.transition = 'transform .38s ease, opacity .38s ease, filter .38s ease';
+      sp.style.transition = 'transform .4s ease, opacity .4s ease, filter .4s ease';
       sp.textContent = src.textContent;
       if (src.classList.contains('red')) sp.classList.add('red');
+
+      // start state (no bolding/contrast pre-style)
+      sp.style.opacity = '1';
+      sp.style.transform = 'translate(0,0) rotate(0deg)';
+      sp.style.filter = 'none';
 
       document.body.appendChild(sp);
       sprites.push(sp);
     });
   });
 
-  // Drive effect
-  sprites.forEach(sp=>{
-    // Force a reflow so transitions apply
-    void sp.offsetWidth;
+  // Helper to clean up
+  const cleanup = (ms=420)=> setTimeout(()=> sprites.forEach(n=> n.remove()), ms);
 
-    if (type === 'slide'){
-      sp.style.transform = 'translateX(120vw) rotate(12deg)';
-      sp.style.opacity = '0';
-    } else if (type === 'fade'){
-      sp.style.opacity = '0';
-    } else if (type === 'dissolve'){
-      sp.style.filter = 'blur(8px)';
-      sp.style.opacity = '0';
-    } else if (type === 'explode'){
-      const dx = (Math.random() * 2 - 1) * 140;
-      const dy = (Math.random() * 2 - 1) * 120;
-      const rot = (Math.random() * 2 - 1) * 30;
-      sp.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(.92)`;
-      sp.style.opacity = '0';
-    } else if (type === 'invertfade' || type === 'invert-fade'){
-      sp.style.filter = 'invert(1)';
-      sp.style.opacity = '0';
-    } else {
-      // 'instant' or unknown → no sprite animation
-    }
+  // Thanos Snap: tile each sprite into particles and drift/fade
+  if (mode === 'thanos'){
+    const PARTICLE = 8; // px tile size
+    const LIFE = 520;   // ms
+    sprites.forEach(card=>{
+      const r = card.getBoundingClientRect();
+      // hide big sprite
+      card.style.opacity = '0';
+
+      const cols = Math.ceil(card.offsetWidth / PARTICLE);
+      const rows = Math.ceil(card.offsetHeight / PARTICLE);
+
+      for (let y=0; y<rows; y++){
+        for (let x=0; x<cols; x++){
+          const p = document.createElement('div');
+          p.style.position   = 'fixed';
+          p.style.left       = (r.left + window.scrollX + x*PARTICLE) + 'px';
+          p.style.top        = (r.top  + window.scrollY + y*PARTICLE) + 'px';
+          p.style.width      = PARTICLE + 'px';
+          p.style.height     = PARTICLE + 'px';
+          p.style.borderRadius = '2px';
+          // approximate card background (works fine for your CSS card)
+          const bg = getComputedStyle(card).background || 'currentColor';
+          p.style.background = bg;
+          p.style.opacity    = '1';
+          p.style.zIndex     = 10000;
+          p.style.pointerEvents = 'none';
+          p.style.transition = `transform ${LIFE}ms ease-out, opacity ${LIFE}ms ease-out, filter ${LIFE}ms ease-out`;
+          document.body.appendChild(p);
+
+          const drift = 40 + Math.random()*80;
+          const ang = (-Math.PI/2) + (Math.random()*Math.PI/2); // mostly up/right
+          const dx = Math.cos(ang) * drift;
+          const dy = Math.sin(ang) * drift + 30; // slight fall
+          const blur = 0.5 + Math.random()*1.5;
+
+          requestAnimationFrame(()=>{
+            p.style.transform = `translate(${dx}px, ${dy}px) rotate(${(Math.random()*20-10)}deg)`;
+            p.style.opacity = '0';
+            p.style.filter  = `blur(${blur}px)`;
+          });
+
+          setTimeout(()=> p.remove(), LIFE+60);
+        }
+      }
+    });
+    cleanup(LIFE+100);
+    return;
+  }
+
+  // Drive sprite effects for the other modes
+  requestAnimationFrame(()=>{
+    sprites.forEach(sp=>{
+      if (mode === 'slide'){
+        sp.style.transform = 'translateX(120vw) rotate(12deg)'; sp.style.opacity = '0';
+      } else if (mode === 'fade'){
+        sp.style.opacity = '0';
+      } else if (mode === 'dissolve'){
+        sp.style.filter = 'blur(8px)'; sp.style.opacity = '0';
+      } else if (mode === 'invertfade' || mode === 'invert-fade'){
+        sp.style.filter = 'invert(1) contrast(1.2)'; sp.style.opacity = '0';
+      } else if (mode === 'explode'){
+        // scatter EACH card separately (multi-card burst)
+        const dx = (Math.random() * 2 - 1) * 160;
+        const dy = (Math.random() * 2 - 1) * 140;
+        const rot = (Math.random() * 2 - 1) * 40;
+        sp.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(.94)`;
+        sp.style.opacity = '0';
+        sp.style.filter = 'blur(0.5px)';
+      } else {
+        // unknown → treat like fade
+        sp.style.opacity = '0';
+      }
+    });
   });
 
-  // Cleanup
-  setTimeout(()=>{
-    sprites.forEach(n=> n.remove());
-  }, 420);
+  cleanup(450);
 }
 
 async function clearPile(byPlayer, reason){
   if (state.pile.length){
     const pileBefore = state.pile.slice();
-    logAction(byPlayer.name + ' clears the pile (' + reason + ').', {snapshotCards: pileBefore});
+    logAction(byPlayer.name + ' clears the pile (' + reason + ').', { snapshotCards: pileBefore });
 
-    // Animate both stacks before clearing state
-    const mainStack = document.getElementById('pileStack');
-    const miniStack = document.getElementById('miniStack');
-    const animType  = settings.clearAnim || 'instant';
-
-    try{
-      await Promise.all([
-        animatePileClear(mainStack, animType, 600),
-        animatePileClear(miniStack, animType, 600)
-      ]);
-    }catch(e){ /* fall back to instant */ }
+    const mode = (settings && settings.clearAnim) || 'fade';
+    if (mode !== 'none') {
+      await animatePileClear(mode);
+    }
 
     state.pile.length = 0;
   }
-
   state.currentValue = null;
   state.currentCount = 0;
   render();
@@ -1952,6 +2000,8 @@ function openSettings(){
   ap.checked = !!settings.autoPlayCopies;
   ap.onchange = ()=>{ settings.autoPlayCopies = ap.checked; saveSettings(); };
   const ca = document.getElementById('setClearAnim');
+  ca.value = settings.clearAnim || 'none';
+  ca.onchange = () => { settings.clearAnim = ca.value; saveSettings(); };
 
   // ----- Card face theme chips -----
   const cfClassic = document.getElementById('cfClassic');
@@ -1972,7 +2022,7 @@ function openSettings(){
   mt.checked = !!settings.miniTap;
   sh.checked = !!settings.showHintBtn;
   ap.checked = !!settings.autoPlayCopies;
-  if (ca) ca.value = settings.clearAnim || 'instant';
+  if (ca) ca.value = settings.clearAnim || 'none';
 
 
   // auto-save handlers

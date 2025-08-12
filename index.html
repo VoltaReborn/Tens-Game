@@ -92,12 +92,13 @@
   <div class="row">
   <span>Pile clear animation</span>
   <select id="setClearAnim">
-    <option value="instant">Disappear instantly</option>
+    <option value="instant">None</option>
     <option value="slide">Slide off pile</option>
     <option value="fade">Fade off pile</option>
     <option value="dissolve">Dissolve</option>
     <option value="explode">Explode</option>
     <option value="invertfade">Invert + fade</option>
+    <option value="thanos">Thanos Snap</option>
   </select>
   </div>
   <div class="row">
@@ -115,12 +116,49 @@
 <div class="section" id="diffExplainer" style="margin-top:8px">
   <button id="diffToggle" class="link-btn" style="padding:0">Difficulty levels ▾</button>
   <div id="diffPanel" style="display:none; margin-top:6px">
-    <div class="row"><b>Easy</b> — Plays legal cards sensibly but simply: prefers highest non-overplay; basic A/2/10 care (won’t 10 an empty pile).</div>
-    <div class="row"><b>Medium</b> — Same base as Easy, plus moderate awareness of clears and pile risk; occasionally takes near-optimal lines.</div>
-    <div class="row"><b>Hard</b> — Prioritizes clears, unloads points efficiently, avoids risky overplays; treats A/2/10 as valuable tempo tools.</div>
-    <div class="row"><b>Expert</b> — Full strategy: preserves A/2/10, times clears, rarely overplays (only under favorable conditions), plans to free face-ups and set safe blind flips.</div>
-    <div class="row"><b>Adaptive</b> — Starts Medium and shifts toward Hard/Expert or back based on match standing after each round.</div>
+  <div class="panel" style="overflow:auto">
+    <table style="width:100%; border-collapse:collapse">
+      <tbody>
+        <tr>
+          <td style="white-space:nowrap; padding:6px 8px; border-bottom:1px solid var(--chrome-border)"><b>Easy</b></td>
+          <td style="padding:6px 8px; border-bottom:1px solid var(--chrome-border)">
+            Prefers the highest non-overplay; basic care with A/2/10 (won’t 10 an empty pile).
+          </td>
+        </tr>
+        <tr>
+          <td style="white-space:nowrap; padding:6px 8px; border-bottom:1px solid var(--chrome-border)"><b>Medium</b></td>
+          <td style="padding:6px 8px; border-bottom:1px solid var(--chrome-border)">
+            Same base as Easy, plus moderate awareness of clears and pile risk; may take near-optimal lines.
+          </td>
+        </tr>
+        <tr>
+          <td style="white-space:nowrap; padding:6px 8px; border-bottom:1px solid var(--chrome-border)"><b>Hard</b></td>
+          <td style="padding:6px 8px; border-bottom:1px solid var(--chrome-border)">
+            Prioritizes clears, unloads points efficiently, avoids risky overplays; treats A/2/10 as tempo tools.
+          </td>
+        </tr>
+        <tr>
+          <td style="white-space:nowrap; padding:6px 8px; border-bottom:1px solid var(--chrome-border)"><b>Expert</b></td>
+          <td style="padding:6px 8px; border-bottom:1px solid var(--chrome-border)">
+            Full strategy: preserves A/2/10, times clears, rarely overplays (only with favorable follow-ups), frees face-ups / safe blind flips.
+          </td>
+        </tr>
+        <tr>
+          <td style="white-space:nowrap; padding:6px 8px; border-bottom:1px solid var(--chrome-border)"><b>Adaptive</b></td>
+          <td style="padding:6px 8px; border-bottom:1px solid var(--chrome-border)">
+            Starts Medium and shifts toward Hard/Expert or back based on match standing after each round.
+          </td>
+        </tr>
+        <tr>
+          <td style="white-space:nowrap; padding:6px 8px"><b>Tries to lose 🤡</b></td>
+          <td style="padding:6px 8px">
+            Intentionally makes poor choices: overplays recklessly, dumps 10s at bad times, and ignores safe lines.
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
+</div>
 </div>
 </div>
 
@@ -234,12 +272,12 @@
   <!-- Rules modal -->
   <div class="modal" id="rulesModal">
     <div class="backdrop"></div>
-    <div class="content">
+    <div class="content" style="max-height:80vh; overflow:auto">
       <h3>How to Play – Tens</h3>
 
       <!-- Overview -->
-      <div class="row" style="margin-top:4px">
-        Shed all cards from your hand and table (face-up first, then face-down). You may play any rank ≤ the current active value, or play a <b>10</b> to clear the pile. A clear also happens when the active rank count reaches <b>4+</b>. If you attempt to play higher-than-last (an overplay), you must pick up the pile first. After any clear, <b>the same player continues</b>.
+      <div class="row" style="margin-top:4px; display:block">
+        Shed all cards from your hand and table (face-up first, then face-down). You may play any rank ≤ the current active value, or play a <b>10</b> to clear the pile. A clear also happens when the active rank count reaches <b>4+</b>. If you play higher-than-last (an overplay), you must pick up the pile and add it to your hand. After any clear or overplay, <b>the same player continues</b>.
       </div>
 
       <!-- Players & Decks -->
