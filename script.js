@@ -757,73 +757,70 @@ async function tryFlipFaceDownSlot(slotIdx){
 
 // ===== Clear / Turn =====
 // ---- Pile clear animations ----
-// ---- Pile clear animations (scoped to a stack element) ----
-function animatePileClear(stackEl, type = 'instant', duration = 600){
-  return new Promise(resolve=>{
-    if (!stackEl || type === 'instant') return resolve();
+// --- Clear animation helper (main pile + mini pile), uses viewport-fixed sprites ---
+function animatePileClear(type){
+  const stacks = [
+    document.getElementById('pileStack'),
+    document.getElementById('miniStack')
+  ].filter(Boolean);
 
-    const cards = Array.from(stackEl.querySelectorAll('.card'));
-    if (!cards.length) return resolve();
+  const sprites = [];
 
-    const rect = stackEl.getBoundingClientRect();
+  stacks.forEach(stack=>{
+    const cards = Array.from(stack.querySelectorAll('.card'));
+    if (!cards.length) return;
 
-    // Overlay only over the stack area (so it won't cover the floating mini pile)
-    const overlay = document.createElement('div');
-    overlay.style.position = 'fixed';
-    overlay.style.left = rect.left + 'px';
-    overlay.style.top = rect.top + 'px';
-    overlay.style.width = rect.width + 'px';
-    overlay.style.height = rect.height + 'px';
-    overlay.style.pointerEvents = 'none';
-    overlay.style.zIndex = '9999';
-    document.body.appendChild(overlay);
-
-    const sprites = cards.map(src=>{
+    cards.forEach(src=>{
       const r = src.getBoundingClientRect();
-      const sp = src.cloneNode(true);
-      sp.style.position = 'absolute';
-      sp.style.left = (r.left - rect.left) + 'px';
-      sp.style.top  = (r.top  - rect.top)  + 'px';
-      sp.style.margin = '0';
-      sp.style.transformOrigin = '50% 50%';
-      sp.style.transition = `transform ${duration}ms ease, opacity ${duration}ms ease, filter ${duration}ms ease`;
-      overlay.appendChild(sp);
-      return sp;
-    });
+      const sp = document.createElement('div');
+      sp.className = 'card';
+      sp.style.position = 'fixed';
+      sp.style.left = (r.left + window.scrollX) + 'px';
+      sp.style.top  = (r.top  + window.scrollY) + 'px';
+      sp.style.width  = r.width + 'px';
+      sp.style.height = r.height + 'px';
+      sp.style.zIndex = 9999;
+      sp.style.pointerEvents = 'none';
+      sp.style.transition = 'transform .38s ease, opacity .38s ease, filter .38s ease';
+      sp.textContent = src.textContent;
+      if (src.classList.contains('red')) sp.classList.add('red');
 
-    // Kick off animation next frame
-    requestAnimationFrame(()=>{
-      sprites.forEach((sp)=>{
-        if (type === 'slide'){
-          sp.style.transform = `translateX(220px) rotate(6deg)`;
-          sp.style.opacity = '0';
-        } else if (type === 'fade'){
-          sp.style.opacity = '0';
-        } else if (type === 'dissolve'){
-          sp.style.opacity = '0';
-          sp.style.transform = 'scale(0.2)';
-          sp.style.filter = 'blur(2px)';
-        } else if (type === 'explode'){
-          const angle = (Math.random() * 360) | 0;
-          const dist  = 120 + Math.random()*120;
-          const dx = Math.cos(angle * Math.PI/180) * dist;
-          const dy = Math.sin(angle * Math.PI/180) * dist;
-          sp.style.transform = `translate(${dx}px, ${dy}px) rotate(${(dx+dy)%45}deg)`;
-          sp.style.opacity = '0';
-        } else if (type === 'invertfade' || type === 'invert-fade') {
-          sp.style.filter = 'invert(1)';
-          sp.style.opacity = '0';
-        } else {
-          sp.style.opacity = '0';
-        }
-      });
+      document.body.appendChild(sp);
+      sprites.push(sp);
     });
-
-    setTimeout(()=>{
-      overlay.remove();
-      resolve();
-    }, duration + 20);
   });
+
+  // Drive effect
+  sprites.forEach(sp=>{
+    // Force a reflow so transitions apply
+    void sp.offsetWidth;
+
+    if (type === 'slide'){
+      sp.style.transform = 'translateX(120vw) rotate(12deg)';
+      sp.style.opacity = '0';
+    } else if (type === 'fade'){
+      sp.style.opacity = '0';
+    } else if (type === 'dissolve'){
+      sp.style.filter = 'blur(8px)';
+      sp.style.opacity = '0';
+    } else if (type === 'explode'){
+      const dx = (Math.random() * 2 - 1) * 140;
+      const dy = (Math.random() * 2 - 1) * 120;
+      const rot = (Math.random() * 2 - 1) * 30;
+      sp.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(.92)`;
+      sp.style.opacity = '0';
+    } else if (type === 'invertfade' || type === 'invert-fade'){
+      sp.style.filter = 'invert(1)';
+      sp.style.opacity = '0';
+    } else {
+      // 'instant' or unknown → no sprite animation
+    }
+  });
+
+  // Cleanup
+  setTimeout(()=>{
+    sprites.forEach(n=> n.remove());
+  }, 420);
 }
 
 async function clearPile(byPlayer, reason){
@@ -867,6 +864,83 @@ function aiLog(p,msg){ log(p.name+' ['+displayDiffLabel()+']: '+msg); }
 function pointsOf(cards){ return cards.reduce(function(acc,c){return acc+scoringValue(c.r);},0); }
 function maxUnloadGroupPoints(p){ const fu=faceUpCards(p), hand=p.hand; const groups={}; [...fu,...hand].forEach(function(c){ if(!c) return; if(c.r==='10'||c.r==='A') return; (groups[c.r]||(groups[c.r]=[])).push(c); }); let best=0; Object.values(groups).forEach(function(g){ best=Math.max(best, pointsOf(g)); }); return best; }
 function pilePointsAdjustedForGuaranteedClear(p){ const counts=pileCounts(); let pts=pointsOf(state.pile); for(const r in counts){ const have = countHandRank(p,r)+countFaceUpRank(p,r); if(r!=='A' && counts[r]+have>=4){ const rPts = counts[r]*scoringValue(r); pts -= rPts; } } return Math.max(0,pts); }
+function pileSingleLowCard(){
+  const arr = state.pile.filter(Boolean);
+  if (arr.length !== 1) return false;
+  const r = arr[0].r;
+  return RVAL[r] <= 5;
+}
+function pileOnlyAcesOrTwos(){
+  const counts = pileCounts();
+  const keys = Object.keys(counts);
+  if (!keys.length) return false;
+  return keys.every(r => r === 'A' || r === '2');
+}
+function canUnloadAtLeastPointsPlusOne(p, pts){
+  // Max unload using non-10/non-ace/non-2 groups from hand+face-up
+  const fu = faceUpCards(p);
+  const groups = {};
+  [...fu, ...p.hand].forEach(c=>{
+    if(!c) return;
+    if(c.r === '10' || c.r === 'A' || c.r === '2') return; // don't count safety cards
+    (groups[c.r]||(groups[c.r]=[])).push(c);
+  });
+  let best = 0;
+  Object.values(groups).forEach(g=>{
+    const v = pointsOf(g);
+    if (v > best) best = v;
+  });
+  return best >= (pts + 1);
+}
+function shouldOverplayOnPurpose(p){
+  if (!(pileSingleLowCard() || pileOnlyAcesOrTwos())) return false;
+  const pilePts = pointsOf(state.pile);
+  return canUnloadAtLeastPointsPlusOne(p, pilePts);
+}
+function someoneAboutToGoOut(p){
+  return state.players.some(pl => pl.id !== p.id && rem(pl) <= 2);
+}
+function playableRanksFrom(arr){
+  return [...new Set(arr.map(c=>c&&c.r))].filter(Boolean);
+}
+function hasAnyPlayableNonSpecial(p){
+  const fu = faceUpCards(p);
+  const ranks = new Set(
+    playableRanksFrom(p.hand).concat(playableRanksFrom(fu))
+  );
+  for (const r of ranks){
+    if (r === 'A' || r === '2' || r === '10') continue;
+    if (canPlayRank(r)) return true;
+  }
+  return false;
+}
+function onlyAor2Playable(p){
+  const fu = faceUpCards(p);
+  const ranks = new Set(
+    playableRanksFrom(p.hand).concat(playableRanksFrom(fu))
+  );
+  let anyPlayable = false;
+  for (const r of ranks){
+    if (canPlayRank(r)){
+      anyPlayable = true;
+      if (r !== 'A' && r !== '2') return false;
+    }
+  }
+  return anyPlayable; // true only if at least one playable and all are A/2
+}
+function earlyGameForA2(){
+  // reuse your "everyoneEarly" (all 4 up & 4 down still, hands large)
+  return everyoneEarly();
+}
+function canEnableFaceUpUnload(p){
+  if (state.currentValue === null) return false;
+  const fu = faceUpCards(p);
+  return fu.some(c => RVAL[c.r] > state.currentValue); // currently blocked by cap
+}
+function canEnableSafeBlindFlip(p){
+  if (state.currentValue === null) return false;
+  return p.slots.some(s => s && s.down && !s.up); // 10 → fresh start → safe flip
+}
 async function aiTakeTurn(p, chain){
   if(chain === undefined) chain = false;
 
@@ -879,51 +953,23 @@ async function aiTakeTurn(p, chain){
     const diff = getAIDifficulty();
     const pileLen = state.pile.length;
 
-    // ===== “hard/expert” early-pressure branches (unchanged logic) =====
-    if((diff==='hard'||diff==='expert') && state.currentValue!==null){
-      const counts=pileCounts(); const distinct=Object.keys(counts).length;
-      const onlyAces = distinct===1 && counts['A']>0;
-      const single3 = distinct===1 && counts['3']===1;
-      const few2s = distinct===1 && counts['2']>=1 && counts['2']<=3;
-
-      if(onlyAces){
-        const higherFU = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r]>1);
-        if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
-
-        const idx1 = p.slots.findIndex(s => s && !s.up && s.down); // ✅ use p.slots
-        if(idx1>=0) return tryFlipFaceDownSlot(idx1);
-
-        const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r]>1);
-        if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
-      }
-
-      if(single3 || few2s){
-        const higherFU2 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
-        if(higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
-
-        const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
-        if(higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
-
-        const j = p.slots.findIndex(s => s && !s.up && s.down); // ✅ use p.slots
-        if(j>=0) return tryFlipFaceDownSlot(j);
-      }
-
-      if(diff==='expert'){
-        const counts3=pileCounts(); const distinct3=Object.keys(counts3).length;
-        if(distinct3<3){
-          const pilePts = pilePointsAdjustedForGuaranteedClear(p);
-          const unload  = maxUnloadGroupPoints(p);
-          if(unload > pilePts){
-            const higherFU3 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
-            if(higherFU3.length) return playCards(p, higherFU3[0], 'faceUp', 1);
-
-            const higherH3 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
-            if(higherH3.length) return playCards(p, higherH3[0], 'hand', 1);
-
-            const k = p.slots.findIndex(s => s && !s.up && s.down); // ✅ use p.slots
-            if(k>=0) return tryFlipFaceDownSlot(k);
-          }
+    // ===== Overplay-on-purpose policy (much stricter) =====
+    if (state.currentValue !== null){
+      // Only consider an intentional overplay under strict conditions
+      if (shouldOverplayOnPurpose(p)){
+        // Try to overplay with a SINGLE higher card (prefer face-up) and then unload
+        const fu = faceUpCards(p);
+        const higherFU = [...new Set(fu.map(c=>c.r))]
+          .filter(r => RVAL[r] > state.currentValue && r!=='A' && r!=='2' && r!=='10');
+        if (higherFU.length){
+          return playCards(p, higherFU[0], 'faceUp', 1);
         }
+        const higherH = [...new Set(p.hand.map(c=>c&&c.r))]
+          .filter(r => r && RVAL[r] > state.currentValue && r!=='A' && r!=='2' && r!=='10');
+        if (higherH.length){
+          return playCards(p, higherH[0], 'hand', 1);
+        }
+        // If we can’t find a “safe” higher card, skip intentional overplay
       }
     }
 
@@ -956,17 +1002,38 @@ async function aiTakeTurn(p, chain){
       if(cntH) return playCards(p,r,'hand',cntH);
     }}
 
-    const hasTenHand=p.hand.some(c=>c&&c.r==='10'); const hasTenFU=fu.some(c=>c.r==='10');
-    if(hasTenHand||hasTenFU){
-      let use10=false;
-      if(diff==='easy') use10 = oppClose || pileLen>6 || Math.random()<0.6;
-      else if(diff==='medium') use10 = oppClose || pileLen>=10 || early;
-      else {
-        const unloadPts = maxUnloadGroupPoints(p);
-        use10 = (!state.currentValue || pileLen>=12 || early) && (oppClose ? unloadPts>=15 : true);
-      }
-      if(use10){ if(hasTenHand) return playCards(p,'10','hand',1); else return playCards(p,'10','faceUp',1); }
+    // ===== Smarter Ten usage (split logic) =====
+const hasTenHand = p.hand.some(c=>c&&c.r==='10');
+const hasTenFU   = faceUpCards(p).some(c=>c.r==='10');
+if (hasTenHand || hasTenFU){
+  const pileEmpty = state.pile.filter(Boolean).length === 0;
+  const existsPlayableNonSpecial = hasAnyPlayableNonSpecial(p);
+  const onlyA2 = onlyAor2Playable(p);
+  const mustOverplay = (!existsPlayableNonSpecial && !onlyA2 && state.currentValue !== null);
+
+  // (A) CRITICAL CASE: Opponent about to go out → unload ALL 10s (even on empty pile)
+  if (someoneAboutToGoOut(p) && hasTenHand){
+    // We play exactly one 10 here; the clear keeps the same player,
+    // aiTakeTurn will be re-entered (chain=true) and this block will fire again,
+    // unloading the next 10 until we’re out of 10s.
+    return playCards(p, '10', 'hand', 1);
+  }
+
+  // (B) GENERAL ENABLER: use 10 to escape bad spots (but NOT on empty pile)
+  // Conditions:
+  //  - only alternative is an overplay, OR
+  //  - only playable cards are A/2 (we want to save hand A/2), OR
+  //  - 10 would newly allow unloading blocked face-up cards, OR
+  //  - 10 would make a blind flip safe (fresh start)
+  if (!pileEmpty){
+    const enableFU = canEnableFaceUpUnload(p);
+    const enableFlip = canEnableSafeBlindFlip(p);
+    const use10 = mustOverplay || onlyA2 || enableFU || enableFlip;
+    if (use10){
+      return hasTenHand ? playCards(p,'10','hand',1) : playCards(p,'10','faceUp',1);
     }
+  }
+}
 
     const legalFU=[...new Set(fu.map(c=>c.r))].filter(r=>canPlayRank(r) && r!=='A');
     if(legalFU.length){ legalFU.sort((a,b)=>RVAL[b]-RVAL[a]); const r1=legalFU[0]; const cnt=fu.filter(c=>c.r===r1).length; return playCards(p,r1,'faceUp',cnt); }
@@ -1393,6 +1460,37 @@ function computeExpertMove(p){
     }
   }
 
+  // ===== Strategic A/2: keep in hand; play face-up earlier when safe =====
+  if (canPlayRank('A') || canPlayRank('2')){
+    const cv = state.currentValue;
+    const thresholdOk = (cv === null) || (RVAL[RANKS[cv-1]] <= 6);
+    const earlyOK = earlyGameForA2();
+
+    const fu = faceUpCards(p);
+
+    // If we have multiple face-up A's, play all face-up copies (not hand)
+    const fuA = fu.filter(c=>c.r==='A').length;
+    if (fuA >= 2 && canPlayRank('A')){
+      return playCards(p,'A','faceUp',fuA);
+    }
+
+    // Multiple face-up 2's, same deal
+    const fu2 = fu.filter(c=>c.r==='2').length;
+    if (fu2 >= 2 && canPlayRank('2')){
+      return playCards(p,'2','faceUp',fu2);
+    }
+
+    // Single face-up A/2 when early & active value is low (≤6): allow
+    if ((earlyOK && thresholdOk)){
+      if (fuA >= 1 && canPlayRank('A')) return playCards(p,'A','faceUp',1);
+      if (fu2 >= 1 && canPlayRank('2')) return playCards(p,'2','faceUp',1);
+    }
+
+    // Otherwise: DO NOT spend A/2 from hand unless it’s literally the last legal option
+    // (handled implicitly because we won’t choose them below unless nothing else is playable)
+  }
+
+
   // ===== Prefer strongest playable from table (non-ace), dump all of that rank =====
   const playableFU = ranksFrom(fu).filter(r => playable(r) && r!=='A')
                                   .sort((a,b)=>RVAL[b]-RVAL[a]);
@@ -1722,65 +1820,74 @@ function openSettings(){
   }
 
   function renderTableRow(){
-    presetWrap.innerHTML = '';
+  presetWrap.innerHTML = '';
 
-    if (!tableEditMode){
-      // Presets as chips
-      PRESETS.forEach(p => presetWrap.appendChild(quickChip(p.hex)));
-      // Customs as chips
-      settings.tableCustomColors.forEach(hex => presetWrap.appendChild(quickChip(hex)));
-    } else {
-  // EDIT MODE
-  // 1) Keep PRESETS looking exactly like non-edit (plain colored chips you can click)
-  PRESETS.forEach(p => presetWrap.appendChild(quickChip(p.hex)));
+  if (!tableEditMode){
+    // Presets as plain color chips
+    PRESETS.forEach(p => presetWrap.appendChild(quickChip(p.hex)));
+    (settings.tableCustomColors || []).forEach(hex => presetWrap.appendChild(quickChip(hex)));
+  } else {
+    // EDIT MODE: show presets first, with only a color box (no "Use" label text)
+    PRESETS.forEach(p=>{
+      const item = document.createElement('div');
+      item.className='chip-item';
+      const box = document.createElement('div');
+      box.className='chip-box';
+      box.style.background = p.hex;
+      // Clicking the box applies the preset
+      box.onclick = ()=> applyTable(p.hex);
+      item.append(box);
+      presetWrap.appendChild(item);
+    });
 
-  // 2) For CUSTOM colors, show colored box (click to use) + small Edit/Delete buttons
-  settings.tableCustomColors.forEach((hex, idx)=>{
-    const item = document.createElement('div');
-    item.className='chip-item';
+    // Then customs with edit/delete tools
+    (settings.tableCustomColors || []).forEach((hex, idx)=>{
+      const item = document.createElement('div');
+      item.className='chip-item';
+      const box = document.createElement('div');
+      box.className='chip-box';
+      box.style.background = hex;
 
-    // colored box (acts as "use")
-    const box = document.createElement('div');
-    box.className='chip-box';
-    box.style.background = hex;
-    box.title = hex;
-    box.onclick = ()=> applyTable(hex);
+      const tools = document.createElement('div');
+      tools.className='chip-tools';
 
-    // tools (Edit / Delete)
-    const tools = document.createElement('div');
-    tools.className='chip-tools';
-
-    const editSmall = document.createElement('button');
-    editSmall.className='chip-mini-btn';
-    editSmall.textContent='Edit';
-    editSmall.onclick = ()=>{
-      colorPick.value = toColorInput(hex);
-      colorPick.onchange = ()=>{
-        const nv = colorPick.value;
-        settings.tableCustomColors[idx] = nv;
-        applyTable(nv);
-        renderTableRow();
+      const editSmall = document.createElement('button'); editSmall.className='chip-mini-btn'; editSmall.textContent='Edit';
+      editSmall.onclick = ()=>{
+        colorPick.value = toColorInput(hex);
+        colorPick.onchange = ()=>{
+          const nv = colorPick.value;
+          settings.tableCustomColors[idx] = nv;
+          applyTable(nv);
+          renderTableRow();
+        };
+        colorPick.click();
       };
-      colorPick.click();
-    };
 
-    const delBtn = document.createElement('button');
-    delBtn.className='chip-mini-btn';
-    delBtn.textContent='Delete';
-    delBtn.onclick = ()=>{
-      settings.tableCustomColors.splice(idx,1);
-      saveSettings();
-      renderTableRow();
-    };
+      const delBtn = document.createElement('button'); delBtn.className='chip-mini-btn'; delBtn.textContent='Delete';
+      delBtn.onclick = ()=>{
+        settings.tableCustomColors.splice(idx,1);
+        saveSettings();
+        // If nothing left to edit, exit edit mode automatically
+        if (!settings.tableCustomColors.length){
+          tableEditMode = false;
+        }
+        renderTableRow();
+        // Also update the Edit button visibility
+        editBtn.style.display = settings.tableCustomColors.length ? '' : 'none';
+        editBtn.textContent = tableEditMode ? 'Done' : 'Edit';
+      };
 
-    tools.append(editSmall, delBtn);
-    item.append(box, tools);
-    presetWrap.appendChild(item);
-  });
-}
-
-    editBtn.textContent = tableEditMode ? 'Done' : 'Edit';
+      tools.append(editSmall, delBtn);
+      item.append(box, tools);
+      presetWrap.appendChild(item);
+    });
   }
+
+  // Toggle Edit button label
+  editBtn.textContent = tableEditMode ? 'Done' : 'Edit';
+  // Hide Edit button unless there is at least one custom color
+  editBtn.style.display = (settings.tableCustomColors && settings.tableCustomColors.length) ? '' : 'none';
+}
 
     // Native picker is triggered by <label for="tableColorPicker"> in HTML
   colorPick.onchange = ()=>{
