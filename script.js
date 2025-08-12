@@ -1629,58 +1629,66 @@ function openSettings(){
       // Customs as chips
       settings.tableCustomColors.forEach(hex => presetWrap.appendChild(quickChip(hex)));
     } else {
-      // Structured items (chip + Edit/Delete buttons)
-      PRESETS.forEach(p=>{
-        const item = document.createElement('div');
-        item.className='chip-item';
-        const box = document.createElement('div');
-        box.className='chip-box';
-        box.style.background = p.hex;
-        const tools = document.createElement('div');
-        tools.className='chip-tools';
-        const useBtn = document.createElement('button'); useBtn.className='chip-mini-btn'; useBtn.textContent='Use';
-        useBtn.onclick = ()=> applyTable(p.hex);
-        tools.append(useBtn);
-        item.append(box, tools);
-        presetWrap.appendChild(item);
-      });
+  // Edit mode: keep colored chips; click the colored box to apply.
+  PRESETS.forEach(p=>{
+    const item = document.createElement('div');
+    item.className='chip-item';
 
-      settings.tableCustomColors.forEach((hex, idx)=>{
-        const item = document.createElement('div');
-        item.className='chip-item';
-        const box = document.createElement('div');
-        box.className='chip-box';
-        box.style.background = hex;
-        const tools = document.createElement('div');
-        tools.className='chip-tools';
+    const box = document.createElement('div');
+    box.className='chip-box';
+    box.style.background = p.hex;
+    box.title = p.hex;
+    box.onclick = ()=> applyTable(p.hex); // colored box = use
 
-        const useBtn = document.createElement('button'); useBtn.className='chip-mini-btn'; useBtn.textContent='Use';
-        useBtn.onclick = ()=> applyTable(hex);
+    const tools = document.createElement('div');
+    tools.className='chip-tools';
+    // No buttons for presets in edit mode
 
-        const editSmall = document.createElement('button'); editSmall.className='chip-mini-btn'; editSmall.textContent='Edit';
-        editSmall.onclick = ()=>{
-          colorPick.value = toColorInput(hex);
-          colorPick.onchange = ()=>{
-            const nv = colorPick.value;
-            settings.tableCustomColors[idx] = nv;
-            applyTable(nv);
-            renderTableRow();
-          };
-          colorPick.click();
-        };
+    item.append(box, tools);
+    presetWrap.appendChild(item);
+  });
 
-        const delBtn = document.createElement('button'); delBtn.className='chip-mini-btn'; delBtn.textContent='Delete';
-        delBtn.onclick = ()=>{
-          settings.tableCustomColors.splice(idx,1);
-          saveSettings();
-          renderTableRow();
-        };
+  settings.tableCustomColors.forEach((hex, idx)=>{
+    const item = document.createElement('div');
+    item.className='chip-item';
 
-        tools.append(useBtn, editSmall, delBtn);
-        item.append(box, tools);
-        presetWrap.appendChild(item);
-      });
-    }
+    const box = document.createElement('div');
+    box.className='chip-box';
+    box.style.background = hex;
+    box.title = hex;
+    box.onclick = ()=> applyTable(hex); // colored box = use
+
+    const tools = document.createElement('div');
+    tools.className='chip-tools';
+
+    const editSmall = document.createElement('button');
+    editSmall.className='chip-mini-btn';
+    editSmall.textContent='Edit';
+    editSmall.onclick = ()=>{
+      colorPick.value = toColorInput(hex);
+      colorPick.onchange = ()=>{
+        const nv = colorPick.value;
+        settings.tableCustomColors[idx] = nv;
+        applyTable(nv);
+        renderTableRow();
+      };
+      colorPick.click();
+    };
+
+    const delBtn = document.createElement('button');
+    delBtn.className='chip-mini-btn';
+    delBtn.textContent='Delete';
+    delBtn.onclick = ()=>{
+      settings.tableCustomColors.splice(idx,1);
+      saveSettings();
+      renderTableRow();
+    };
+
+    tools.append(editSmall, delBtn);
+    item.append(box, tools);
+    presetWrap.appendChild(item);
+  });
+}
 
     editBtn.textContent = tableEditMode ? 'Done' : 'Edit';
   }
