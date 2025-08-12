@@ -434,3 +434,26 @@ button, .card.playable{ touch-action: manipulation }
 .stats-totals .st-row:first-of-type{ border-top:none }
 .stats-totals .st-name{ opacity:.95 }
 .stats-totals .st-val{ font-weight:700 }
+
+/* Tabs header inside settings */
+.tabs{
+  display:flex; gap:8px; margin:6px 0 10px;
+  position: sticky; top: 0;
+  background: color-mix(in srgb, var(--felt) 88%, black);
+  padding: 4px 0; z-index: 1;
+}
+.tab{
+  background: rgba(0,0,0,.18);
+  border:1px solid rgba(255,255,255,.22);
+  color: var(--ivory);
+  padding:6px 10px; border-radius:10px; cursor:pointer; font-size:13px;
+}
+.tab.active{
+  background: var(--ui-bg);
+  border-color: var(--ui-border);
+  outline: 2px solid color-mix(in oklab, var(--felt) 40%, white);
+}
+
+/* Card face theme chip selection state */
+.chip-group{ display:flex; gap:8px; align-items:center; }
+.chip.selected{ outline:2px solid var(--accent); }

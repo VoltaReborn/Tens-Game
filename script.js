@@ -15,6 +15,7 @@ const settings = {
   pauseBefore:false, warnOn:false, warnThresh:5,
   showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false,
   showHintBtn:true,
+  cardFaceTheme: 'classic',        // 'classic' | 'dark'
   autoPlayCopies:false,            // NEW: auto-play all copies except A/2/10
   // appearance
   tableColor:'#0a5a3c',            // NEW: felt base
@@ -37,6 +38,10 @@ function loadSettings(){
   if (typeof settings.showHintBtn !== 'boolean') settings.showHintBtn = true;
   if (typeof settings.autoPlayCopies !== 'boolean') settings.autoPlayCopies = false;
 
+  // Normalize card face theme and apply
+  if (settings.cardFaceTheme !== 'dark') settings.cardFaceTheme = 'classic';
+  document.body.dataset.cardface = settings.cardFaceTheme;
+
   // Apply table/chrome and cardback immediately
   applyTableTheme(settings.tableColor);
   applyCardBackToBody();
@@ -53,6 +58,7 @@ function saveSettings(){
   applyTableTheme(settings.tableColor);
   applyCardBackToBody();
   document.body.dataset.cardback = settings.cardBack || 'solid-blue';
+  document.body.dataset.cardface = settings.cardFaceTheme;
 }
 
 // derive felt-dark + chrome vars from a base color
@@ -1514,6 +1520,23 @@ function resetAll(){ const n=parseInt(document.getElementById('playerCount').val
 function openSettings(){
   const m = document.getElementById('settingsModal');
   m.style.display = 'flex';
+    // ----- Tabs (Gameplay / Appearance) -----
+  const tabGameplayBtn   = document.getElementById('tabGameplay');
+  const tabAppearanceBtn = document.getElementById('tabAppearance');
+  const gameplayTab      = document.getElementById('gameplayTab');
+  const appearanceTab    = document.getElementById('appearanceTab');
+
+  function showTab(which){
+    const gp = which === 'gameplay';
+    gameplayTab.style.display   = gp ? '' : 'none';
+    appearanceTab.style.display = gp ? 'none' : '';
+    tabGameplayBtn.classList.toggle('active', gp);
+    tabAppearanceBtn.classList.toggle('active', !gp);
+  }
+  tabGameplayBtn.onclick   = ()=> showTab('gameplay');
+  tabAppearanceBtn.onclick = ()=> showTab('appearance');
+  showTab('gameplay'); // default when opening
+
 
   // Ensure arrays exist in settings
   if (!Array.isArray(settings.tableCustomColors)) settings.tableCustomColors = [];
@@ -1526,9 +1549,20 @@ function openSettings(){
   const s  = document.getElementById('setSuits');
   const mt = document.getElementById('setMiniTap');
   const sh = document.getElementById('setShowHint');
-  const ap = document.getElementById('setAutoPlayCopies');
+  const ap = document.getElementById('setAutoPlayAll');
   ap.checked = !!settings.autoPlayCopies;
   ap.onchange = ()=>{ settings.autoPlayCopies = ap.checked; saveSettings(); };
+
+    // ----- Card face theme chips -----
+  const cfClassic = document.getElementById('cfClassic');
+  const cfDark    = document.getElementById('cfDark');
+  function paintCF(){
+    cfClassic.classList.toggle('selected', settings.cardFaceTheme === 'classic');
+    cfDark.classList.toggle('selected',    settings.cardFaceTheme === 'dark');
+  }
+  cfClassic.onclick = ()=>{ settings.cardFaceTheme = 'classic'; saveSettings(); paintCF(); render(); };
+  cfDark.onclick    = ()=>{ settings.cardFaceTheme = 'dark';    saveSettings(); paintCF(); render(); };
+  paintCF();
 
   // set current values
   p.checked  = !!settings.pauseBefore;
@@ -1651,18 +1685,16 @@ function openSettings(){
     editBtn.textContent = tableEditMode ? 'Done' : 'Edit';
   }
 
-  addBtn.onclick = ()=>{
-    colorPick.value = '#156f4a';
-    colorPick.onchange = ()=>{
-      const val = colorPick.value;
-      if (!settings.tableCustomColors.includes(val)){
-        settings.tableCustomColors.push(val);
-      }
-      applyTable(val);
-      renderTableRow();
-    };
-    colorPick.click();
+    // Native picker is triggered by <label for="tableColorPicker"> in HTML
+  colorPick.onchange = ()=>{
+    const val = colorPick.value;
+    if (!settings.tableCustomColors.includes(val)){
+      settings.tableCustomColors.push(val);
+    }
+    applyTable(val);
+    renderTableRow();
   };
+
   editBtn.onclick = ()=>{ tableEditMode = !tableEditMode; renderTableRow(); };
 
   renderTableRow();
@@ -1815,27 +1847,39 @@ function openSettings(){
   previewBox.onclick = ()=> setExpanded(ui.dataset.expanded !== 'true');
 
   // Create new custom
-  addSolid.onclick = ()=>{
-    pickSolid.value = '#1e4e8c';
-    pickSolid.onchange = ()=>{
-      const val = 'solid:' + pickSolid.value;
-      if (!settings.cardBackFavs.includes(val)) settings.cardBackFavs.push(val);
-      saveSettings(); renderCardBackFavs(); saveCardBack(val);
-    };
-    pickSolid.click();
+    // Triggered by <label for="cardBackSolidPicker"> in HTML
+  pickSolid.onchange = ()=>{
+    const val = 'solid:' + pickSolid.value;
+    if (!settings.cardBackFavs.includes(val)) settings.cardBackFavs.push(val);
+    saveSettings(); renderCardBackFavs(); saveCardBack(val);
   };
-  addMix.onclick = ()=>{
-    pickMixA.value = '#b11f1f';
-    pickMixB.value = '#153a68';
-    pickMixA.onchange = ()=>{
-      pickMixB.onchange = ()=>{
-        const val = 'mix:' + pickMixA.value + ',' + pickMixB.value;
+
+    addMix.onclick = ()=>{
+    let editor = document.getElementById('mixEditorRow');
+    if (!editor){
+      editor = document.createElement('div');
+      editor.id = 'mixEditorRow';
+      editor.className = 'row';
+      editor.style.gap = '8px';
+      editor.innerHTML = `
+        <span style="opacity:.9">Pick two colors</span>
+        <input type="color" id="mixA" value="#b11f1f">
+        <input type="color" id="mixB" value="#153a68">
+        <button id="mixSave" class="themed-btn">Save</button>
+        <button id="mixCancel" class="themed-btn-ghost">Cancel</button>
+      `;
+      document.getElementById('cardBackPanel').appendChild(editor);
+
+      editor.querySelector('#mixSave').onclick = ()=>{
+        const a = editor.querySelector('#mixA').value;
+        const b = editor.querySelector('#mixB').value;
+        const val = 'mix:' + a + ',' + b;
         if (!settings.cardBackFavs.includes(val)) settings.cardBackFavs.push(val);
         saveSettings(); renderCardBackFavs(); saveCardBack(val);
+        editor.remove();
       };
-      pickMixB.click();
-    };
-    pickMixA.click();
+      editor.querySelector('#mixCancel').onclick = ()=> editor.remove();
+    }
   };
 
   // Favorites edit toggle
@@ -1863,7 +1907,7 @@ function saveSettingsFromUI(){
   const s  = document.getElementById('setSuits');
   const mt = document.getElementById('setMiniTap');
   const sh = document.getElementById('setShowHint');
-  const ap = document.getElementById('setAutoPlayCopies');
+  const ap = document.getElementById('setAutoPlayAll');
 
   settings.pauseBefore = !!p.checked;
   settings.warnOn      = !!w.checked;

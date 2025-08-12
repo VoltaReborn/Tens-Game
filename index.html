@@ -78,76 +78,95 @@
   <div class="content">
     <h3>Settings</h3>
 
-    <!-- Gameplay -->
-    <div class="sectionTitle">Gameplay</div>
-    <div class="row"><span>Pause before board clear</span><label class="switch"><input type="checkbox" id="setPauseBefore"><i></i></label></div>
-    <div class="row">
-      <span>Warn when an <b>AI</b> player has ≤ <input id="setWarnThresh" type="number" min="1" max="30" value="5" class="themed-input-narrow"> cards</span>
-      <label class="switch"><input type="checkbox" id="setWarnOn"><i></i></label>
+<!-- Tabs header -->
+<div class="tabs">
+  <button id="tabGameplay"   class="tab active">Gameplay</button>
+  <button id="tabAppearance" class="tab">Appearance</button>
+</div>
+
+<!-- Tab: Gameplay -->
+<div id="gameplayTab">
+  <div class="sectionTitle">Gameplay</div>
+  <div class="row"><span>Pause before board clear</span><label class="switch"><input type="checkbox" id="setPauseBefore"><i></i></label></div>
+  <div class="row">
+    <span>Warn when an <b>AI</b> player has ≤ <input id="setWarnThresh" type="number" min="1" max="30" value="5" class="themed-input-narrow"> cards</span>
+    <label class="switch"><input type="checkbox" id="setWarnOn"><i></i></label>
+  </div>
+  <div class="row"><span>Show suits</span><label class="switch"><input type="checkbox" id="setSuits"><i></i></label></div>
+  <div class="row mobile-only"><span>Tap mini pile to hide/show</span><label class="switch"><input type="checkbox" id="setMiniTap"><i></i></label></div>
+  <div class="row"><span>Show Hint button</span><label class="switch"><input type="checkbox" id="setShowHint"><i></i></label></div>
+  <div class="row">
+    <span>Auto-play all copies (except A, 2, 10)</span>
+    <label class="switch"><input type="checkbox" id="setAutoPlayAll"><i></i></label>
+  </div>
+</div>
+
+<!-- Tab: Appearance -->
+<div id="appearanceTab" style="display:none">
+  <div class="sectionTitle" style="margin-top:10px">Appearance</div>
+
+  <!-- Card face theme -->
+  <div class="row">
+    <span>Card face theme</span>
+    <div class="chip-group">
+      <button type="button" id="cfClassic" class="chip">Classic</button>
+      <button type="button" id="cfDark" class="chip">Dark</button>
     </div>
-    <div class="row"><span>Show suits</span><label class="switch"><input type="checkbox" id="setSuits"><i></i></label></div>
-    <div class="row mobile-only"><span>Tap mini pile to hide/show</span><label class="switch"><input type="checkbox" id="setMiniTap"><i></i></label></div>
-    <div class="row"><span>Show Hint button</span><label class="switch"><input type="checkbox" id="setShowHint"><i></i></label></div>
-    <div class="row">
-      <span>Auto-play all copies (except A, 2, 10)</span>
-      <label class="switch">
-        <input type="checkbox" id="setAutoPlayCopies">
-        <i></i>
-      </label>
-    </div>
+  </div>
 
+  <!-- Table color row -->
+  <div class="row" id="tableColorRow">
+    <span>Table color</span>
+    <div class="color-chip-row" id="tablePresetChips"></div>
 
-    <!-- Appearance -->
-    <div class="sectionTitle" style="margin-top:10px">Appearance</div>
+    <!-- label triggers native color picker (mobile friendly) -->
+    <label for="tableColorPicker" id="tableColorAdd" class="chip-plus" title="Add color">+</label>
+    <button id="tableColorEdit" class="link-btn" style="margin-left:auto">Edit</button>
+    <input type="color" id="tableColorPicker" style="display:none">
+  </div>
 
-    <!-- Table color row -->
-    <div class="row" id="tableColorRow">
-      <span>Table color</span>
-      <div class="color-chip-row" id="tablePresetChips"></div>
-      <button id="tableColorAdd" class="chip-plus" title="Add color">+</button>
-      <button id="tableColorEdit" class="link-btn" style="margin-left:auto">Edit</button>
-      <input type="color" id="tableColorPicker" style="display:none">
-    </div>
-
-    <!-- Card backs -->
-    <div class="section" id="cardBackUI" data-expanded="false">
-      <div class="row" style="align-items:center; gap:10px">
-        <span><b>Card back</b></span>
-        <div id="cardBackPreview" class="cardback-preview toggler" title="Click to change">
-          <div class="cardback-thumb" id="cardBackPreviewThumb"></div>
-          <span class="lbl" id="cardBackPreviewLabel"></span>
-        </div>
-      </div>
-
-      <!-- Collapsible content -->
-      <div id="cardBackPanel" style="display:none; margin-top:8px">
-        <!-- Built-ins -->
-        <div class="cardback-grid" id="cardBackGallery"></div>
-
-        <!-- Custom creators -->
-        <div class="row" style="margin-top:8px; gap:8px">
-          <span style="opacity:.9">Custom</span>
-          <button id="addSolidBack" class="themed-btn">Add solid…</button>
-          <button id="addMixBack" class="themed-btn">Add mix…</button>
-          <input type="color" id="cardBackSolidPicker" style="display:none">
-          <input type="color" id="cardBackMixA" style="display:none">
-          <input type="color" id="cardBackMixB" style="display:none">
-        </div>
-
-        <!-- Favorites (hidden when empty) -->
-        <div class="section" id="cardBackFavRow" style="display:none; margin-top:8px">
-          <div class="row" style="align-items:center; gap:10px">
-            <span>Saved card backs</span>
-            <button id="cardBackEdit" class="link-btn" style="margin-left:auto">Edit</button>
-          </div>
-          <div class="cardback-grid" id="cardBackFavs"></div>
-        </div>
+  <!-- Card backs -->
+  <div class="section" id="cardBackUI" data-expanded="false">
+    <div class="row" style="align-items:center; gap:10px">
+      <span><b>Card back</b></span>
+      <div id="cardBackPreview" class="cardback-preview toggler" title="Click to change">
+        <div class="cardback-thumb" id="cardBackPreviewThumb"></div>
+        <span class="lbl" id="cardBackPreviewLabel"></span>
       </div>
     </div>
 
-    <div class="actions">
-      <button id="setClose" class="primary themed-btn">Close</button>
+    <!-- Collapsible content -->
+    <div id="cardBackPanel" style="display:none; margin-top:8px">
+      <!-- Built-ins -->
+      <div class="cardback-grid" id="cardBackGallery"></div>
+
+      <!-- Custom creators -->
+      <div class="row" style="margin-top:8px; gap:8px">
+        <span style="opacity:.9">Custom</span>
+
+        <!-- label triggers native picker (mobile friendly) -->
+        <label for="cardBackSolidPicker" class="themed-btn">Add solid…</label>
+        <button id="addMixBack" class="themed-btn">Add mix…</button>
+
+        <input type="color" id="cardBackSolidPicker" style="display:none">
+        <!-- Mix editor row will be injected here when you click "Add mix…" -->
+      </div>
+
+      <!-- Favorites (hidden when empty) -->
+      <div class="section" id="cardBackFavRow" style="display:none; margin-top:8px">
+        <div class="row" style="align-items:center; gap:10px">
+          <span>Saved card backs</span>
+          <button id="cardBackEdit" class="link-btn" style="margin-left:auto">Edit</button>
+        </div>
+        <div class="cardback-grid" id="cardBackFavs"></div>
+      </div>
     </div>
+  </div>
+</div>
+
+<div class="actions">
+  <button id="setClose" class="primary themed-btn">Close</button>
+</div>
   </div>
 </div>
 
