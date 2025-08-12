@@ -1234,7 +1234,7 @@ async function aiTakeTurn(p, chain){
         if (p.hand.some(c => c && c.r === 'A')) return playCards(p, 'A', 'hand', 1);
       }
     }
-    
+
     if(ranksAvail.has('A') && canPlayRank('A')){
       if(fuNow.some(c=>c.r==='A')) return playCards(p,'A','faceUp',1);
       if(p.hand.some(c=>c&&c.r==='A')) return playCards(p,'A','hand',1);
@@ -1914,6 +1914,17 @@ function openSettings(){
   const gameplayTab      = document.getElementById('gameplayTab');
   const appearanceTab    = document.getElementById('appearanceTab');
 
+  // Difficulty explainer toggle
+  const diffToggle = document.getElementById('diffToggle');
+  const diffPanel  = document.getElementById('diffPanel');
+  if (diffToggle && diffPanel) {
+    diffToggle.onclick = () => {
+      const open = diffPanel.style.display !== 'none';
+      diffPanel.style.display = open ? 'none' : 'block';
+      diffToggle.textContent = open ? 'Difficulty levels ▾' : 'Difficulty levels ▴';
+    };
+  }
+
   function showTab(which){
     const gp = which === 'gameplay';
     gameplayTab.style.display   = gp ? '' : 'none';
@@ -2326,6 +2337,21 @@ resetAll();
 initMiniObserver();
 
 document.body.dataset.cardback=settings.cardBack;
+
+// Rules modal open/close
+const rulesBtn = document.getElementById('rulesBtn');
+if (rulesBtn) {
+  rulesBtn.addEventListener('click', () => {
+    document.getElementById('rulesModal').style.display = 'flex';
+  });
+}
+
+document.getElementById('rulesClose').addEventListener('click', () => {
+  document.getElementById('rulesModal').style.display = 'none';
+});
+document.querySelector('#rulesModal .backdrop').addEventListener('click', () => {
+  document.getElementById('rulesModal').style.display = 'none';
+});
 
 // Events
   document.getElementById('playerCount').addEventListener('change',resetAll);

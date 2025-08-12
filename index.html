@@ -36,6 +36,7 @@
       <button id="newGame">Forfeit Game</button>
       <button id="runTests" style="display:none">Run Rule Tests</button>
       <button id="settingsBtn">Settings</button>
+      <button id="rulesBtn">Rules</button>
       <button id="hintBtn">Hint</button>
       <span class="hint">Match ends when someone hits 150+ points.</span>
     </div>
@@ -110,6 +111,17 @@
     <span>Auto-play all copies (except A, 2, 10)</span>
     <label class="switch"><input type="checkbox" id="setAutoPlayAll"><i></i></label>
   </div>
+  <!-- Difficulty levels (collapsible) -->
+<div class="section" id="diffExplainer" style="margin-top:8px">
+  <button id="diffToggle" class="link-btn" style="padding:0">Difficulty levels ▾</button>
+  <div id="diffPanel" style="display:none; margin-top:6px">
+    <div class="row"><b>Easy</b> — Plays legal cards sensibly but simply: prefers highest non-overplay; basic A/2/10 care (won’t 10 an empty pile).</div>
+    <div class="row"><b>Medium</b> — Same base as Easy, plus moderate awareness of clears and pile risk; occasionally takes near-optimal lines.</div>
+    <div class="row"><b>Hard</b> — Prioritizes clears, unloads points efficiently, avoids risky overplays; treats A/2/10 as valuable tempo tools.</div>
+    <div class="row"><b>Expert</b> — Full strategy: preserves A/2/10, times clears, rarely overplays (only under favorable conditions), plans to free face-ups and set safe blind flips.</div>
+    <div class="row"><b>Adaptive</b> — Starts Medium and shifts toward Hard/Expert or back based on match standing after each round.</div>
+  </div>
+</div>
 </div>
 
 <!-- Tab: Appearance -->
@@ -219,20 +231,87 @@
     </div>
   </div>
 
-  <!-- Stats modal -->
-<div class="modal" id="statsModal">
-  <div class="backdrop"></div>
-  <div class="content">
-    <h3>Match Stats</h3>
-    <div class="row" style="gap:8px">
-      <span>Player</span>
-      <select id="statsPlayer"></select>
-    </div>
-    <div id="statsChart" style="margin-top:8px"></div>
-    <div class="actions">
-      <button id="statsClose" class="primary">Close</button>
+  <!-- Rules modal -->
+  <div class="modal" id="rulesModal">
+    <div class="backdrop"></div>
+    <div class="content">
+      <h3>How to Play – Tens</h3>
+
+      <!-- Overview -->
+      <div class="row" style="margin-top:4px">
+        Shed all cards from your hand and table (face-up first, then face-down). You may play any rank ≤ the current active value, or play a <b>10</b> to clear the pile. A clear also happens when the active rank count reaches <b>4+</b>. If you attempt to play higher-than-last (an overplay), you must pick up the pile first. After any clear, <b>the same player continues</b>.
+      </div>
+
+      <!-- Players & Decks -->
+      <div class="sectionTitle" style="margin-top:10px">Players & Decks</div>
+      <div class="panel" style="overflow:auto">
+        <table class="rules-table" style="width:100%; border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid var(--chrome-border)">Players</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid var(--chrome-border)">Cards per Player</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid var(--chrome-border)">Total Cards Needed</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid var(--chrome-border)">Full Decks Used</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 19 cards per player (11 hand + 8 table), so decks = ceil(players*19 / 52) -->
+            <tr><td style="padding:6px">2</td><td style="padding:6px">19</td><td style="padding:6px">38</td><td style="padding:6px">1 deck</td></tr>
+            <tr><td style="padding:6px">3</td><td style="padding:6px">19</td><td style="padding:6px">57</td><td style="padding:6px">2 decks</td></tr>
+            <tr><td style="padding:6px">4</td><td style="padding:6px">19</td><td style="padding:6px">76</td><td style="padding:6px">2 decks</td></tr>
+            <tr><td style="padding:6px">5</td><td style="padding:6px">19</td><td style="padding:6px">95</td><td style="padding:6px">2 decks</td></tr>
+            <tr><td style="padding:6px">6</td><td style="padding:6px">19</td><td style="padding:6px">114</td><td style="padding:6px">3 decks</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Setup -->
+      <div class="sectionTitle" style="margin-top:10px">Setup</div>
+      <ul style="margin:6px 0 0 16px">
+        <li>Each player gets <b>11</b> cards in hand.</li>
+        <li>Each player has <b>4 face-down</b> cards with <b>4 face-up</b> cards on top (their table).</li>
+        <li>Build a shoe from full decks so there are enough total cards (see table above). Extra cards are not used.</li>
+      </ul>
+
+      <!-- Turn & Play -->
+      <div class="sectionTitle" style="margin-top:10px">Turn & Play</div>
+      <ul style="margin:6px 0 0 16px">
+        <li>If the pile is fresh, you may start with any rank or a <b>10</b> (which clears immediately).</li>
+        <li>Otherwise you may play any rank ≤ the current active value (matching starts/continues the count).</li>
+        <li><b>10 clears the pile</b> (always plays 1 card).</li>
+        <li>When the active rank’s count reaches <b>4 or more</b>, the pile clears.</li>
+        <li>Playing a higher rank than the active value is an <b>overplay</b> → you must pick up the pile before continuing.</li>
+        <li>When you have no hand cards and no face-up cards of a legal rank, flip a face-down card and resolve it.</li>
+      </ul>
+
+      <!-- End of Round & Match -->
+      <div class="sectionTitle" style="margin-top:10px">End of Round & Match</div>
+      <ul style="margin:6px 0 0 16px">
+        <li>When a player sheds all cards, the round ends; everyone scores the point values of remaining cards.</li>
+        <li>Match ends when any player reaches <b>150+</b> points; lowest total score wins the match.</li>
+      </ul>
+
+      <div class="actions">
+        <button id="rulesClose" class="primary themed-btn">Close</button>
+      </div>
     </div>
   </div>
+
+
+  <!-- Stats modal -->
+  <div class="modal" id="statsModal">
+    <div class="backdrop"></div>
+    <div class="content">
+      <h3>Match Stats</h3>
+      <div class="row" style="gap:8px">
+        <span>Player</span>
+        <select id="statsPlayer"></select>
+      </div>
+      <div id="statsChart" style="margin-top:8px"></div>
+      <div class="actions">
+        <button id="statsClose" class="primary">Close</button>
+      </div>
+    </div>
 </div>
 </body>
 </html>
