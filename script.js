@@ -810,6 +810,9 @@ function animatePileClear(stackEl, type = 'instant', duration = 600){
           const dy = Math.sin(angle * Math.PI/180) * dist;
           sp.style.transform = `translate(${dx}px, ${dy}px) rotate(${(dx+dy)%45}deg)`;
           sp.style.opacity = '0';
+        } else if (type === 'invertfade' || type === 'invert-fade') {
+          sp.style.filter = 'invert(1)';
+          sp.style.opacity = '0';
         } else {
           sp.style.opacity = '0';
         }
