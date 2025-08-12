@@ -853,6 +853,21 @@ async function clearPile(byPlayer, reason){
 function endOrNext(){ render(); const finisher=state.players.find(function(pp){return !hasCards(pp);}); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
 
 // ===== AI =====
+// Choose highest non-special rank; Easy may sometimes pick 2nd-highest.
+// specials are handled elsewhere (A, 2, 10).
+function pickBestNonSpecial(ranks, diff){
+  const sorted = [...ranks].filter(r => r !== 'A' && r !== '10' && r !== '2')
+                           .sort((a,b)=> RVAL[b] - RVAL[a]);
+  if (sorted.length === 0) return null;
+
+  if (diff === 'easy'){
+    // Easy sometimes picks the 2nd-best to be beatable/predictable
+    if (sorted.length > 1 && Math.random() < 0.25) return sorted[1];
+  }
+
+  // Medium/Hard/Expert are deterministic & optimal here
+  return sorted[0];
+}
 function getSelectedDifficulty(){ const el=document.getElementById('aiDifficulty'); return el? (el.value||'easy') : 'easy'; }
 function getAIDifficulty(){ const sel=getSelectedDifficulty(); if(sel==='adaptive') return state.aiAdaptive; return sel; }
 function displayDiffLabel(){ const sel=getSelectedDifficulty(); return sel==='adaptive' ? ('Adaptive ('+state.aiAdaptive+')') : sel; }
@@ -1162,23 +1177,64 @@ async function aiTakeTurn(p, chain){
       if(cntH) return playCards(p,r,'hand',cntH);
     }}
 
-    const hasTenHand=p.hand.some(c=>c&&c.r==='10'); const hasTenFU=fuNow.some(c=>c.r==='10');
-    if(hasTenHand||hasTenFU){
-      let use10=false;
-      if(diff==='easy') use10 = oppClose || pileLen>6 || Math.random()<0.6;
-      else if(diff==='medium') use10 = oppClose || pileLen>=10 || early;
-      else {
+    const hasTenHand = p.hand.some(c => c && c.r === '10');
+    const hasTenFU   = fu.some(c => c.r === '10');
+    if (hasTenHand || hasTenFU){
+      let use10 = false;
+
+      if (diff === 'easy'){
+        // EASY: Never burn 10 on an empty pile unless it's the ONLY legal play.
+        const emptyPile = state.pile.length === 0;
+        const haveOtherLegal =
+          [...new Set(
+            p.hand.filter(c=>c&&c.r).map(c=>c.r)
+              .concat(fu.map(c=>c.r))
+          )].some(r => r !== '10' && canPlayRank(r));
+
+        // Use 10 to dodge trouble: big pile, or nothing else plays.
+        use10 = (!emptyPile && pileLen >= 8) || (!haveOtherLegal);
+      } else if (diff === 'medium'){
+        use10 = oppClose || pileLen >= 10 || early;
+      } else {
         const unloadPts = maxUnloadGroupPoints(p);
-        use10 = (!state.currentValue || pileLen>=12 || early) && (oppClose ? unloadPts>=15 : true);
+        use10 = (!state.currentValue || pileLen >= 12 || early) && (oppClose ? unloadPts >= 15 : true);
       }
-      if(use10){ if(hasTenHand) return playCards(p,'10','hand',1); else return playCards(p,'10','faceUp',1); }
+
+      if (use10){
+        if (hasTenHand) return playCards(p, '10', 'hand', 1);
+        else            return playCards(p, '10', 'faceUp', 1);
+      }
     }
 
-    const legalFU=[...new Set(fuNow.map(c=>c.r))].filter(r=>canPlayRank(r) && r!=='A');
-    if(legalFU.length){ legalFU.sort((a,b)=>RVAL[b]-RVAL[a]); const r1=legalFU[0]; const cnt=fuNow.filter(c=>c.r===r1).length; return playCards(p,r1,'faceUp',cnt); }
-    legal.sort((a,b)=>RVAL[b]-RVAL[a]);
-    for(const r2 of legal){ if(r2==='A') continue; const cntH2=p.hand.filter(c=>c&&c.r===r2).length; if(cntH2){ return playCards(p,r2,'hand',cntH2); } }
 
+    const legalFU = [...new Set(fu.map(c=>c.r))].filter(r => canPlayRank(r));
+    if (legalFU.length){
+      const r1 = pickBestNonSpecial(legalFU, diff);
+      if (r1){
+        const cnt = fu.filter(c => c.r === r1).length;
+        return playCards(p, r1, 'faceUp', cnt);
+      }
+    }
+    {
+      const r2 = pickBestNonSpecial(legal, diff);
+      if (r2){
+        const cntH2 = p.hand.filter(c => c && c.r === r2).length;
+        if (cntH2){ return playCards(p, r2, 'hand', cntH2); }
+      }
+    }
+    // EASY: Doesn't hoard specials. If a non-special wasn't played above,
+    // try a 2, then an Ace (prefer face-up, play just one).
+    if (diff === 'easy'){
+      if (canPlayRank('2')){
+        if (fu.some(c => c.r === '2')) return playCards(p, '2', 'faceUp', 1);
+        if (p.hand.some(c => c && c.r === '2')) return playCards(p, '2', 'hand', 1);
+      }
+      if (canPlayRank('A')){
+        if (fu.some(c => c.r === 'A')) return playCards(p, 'A', 'faceUp', 1);
+        if (p.hand.some(c => c && c.r === 'A')) return playCards(p, 'A', 'hand', 1);
+      }
+    }
+    
     if(ranksAvail.has('A') && canPlayRank('A')){
       if(fuNow.some(c=>c.r==='A')) return playCards(p,'A','faceUp',1);
       if(p.hand.some(c=>c&&c.r==='A')) return playCards(p,'A','hand',1);
