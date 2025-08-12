@@ -945,6 +945,25 @@ function totalByRanks(m,ranks){ let s=0; for(const r of ranks){ s+=m[r]||0; } re
 function aiLog(p,msg){ log(p.name+' ['+displayDiffLabel()+']: '+msg); }
 function pointsOf(cards){ return cards.reduce(function(acc,c){return acc+scoringValue(c.r);},0); }
 function maxUnloadGroupPoints(p){ const fu=faceUpCards(p), hand=p.hand; const groups={}; [...fu,...hand].forEach(function(c){ if(!c) return; if(c.r==='10'||c.r==='A') return; (groups[c.r]||(groups[c.r]=[])).push(c); }); let best=0; Object.values(groups).forEach(function(g){ best=Math.max(best, pointsOf(g)); }); return best; }
+// Best legal (non-overplay) unload from hand+face-up, ignoring A/2/10.
+// Returns {points, rank} where "rank" is ≤ currentValue (or any if fresh).
+function bestLegalUnload(p){
+  const fu = faceUpCards(p);
+  const groups = {};
+  [...fu, ...p.hand].forEach(c=>{
+    if(!c) return;
+    if (c.r === '10' || c.r === 'A' || c.r === '2') return; // safety cards not considered “unload”
+    if (!canPlayRank(c.r)) return; // must be legal (≤ current cap or fresh)
+    (groups[c.r]||(groups[c.r]=[])).push(c);
+  });
+
+  let bestPts = 0, bestRank = null;
+  for (const r in groups){
+    const v = pointsOf(groups[r]);
+    if (v > bestPts){ bestPts = v; bestRank = r; }
+  }
+  return { points: bestPts, rank: bestRank };
+}
 function pilePointsAdjustedForGuaranteedClear(p){ const counts=pileCounts(); let pts=pointsOf(state.pile); for(const r in counts){ const have = countHandRank(p,r)+countFaceUpRank(p,r); if(r!=='A' && counts[r]+have>=4){ const rPts = counts[r]*scoringValue(r); pts -= rPts; } } return Math.max(0,pts); }
 function pileSingleLowCard(){
   const arr = state.pile.filter(Boolean);
@@ -1200,7 +1219,17 @@ async function aiTakeTurn(p, chain){
         if(distinct3<3){
           const pilePts = pilePointsAdjustedForGuaranteedClear(p);
           const unload  = maxUnloadGroupPoints(p);
-          if(unload > pilePts){
+          if (unload > pilePts){
+            // NEW: if there is a legal non-overplay unload that already beats the pile,
+            // take that instead of overplaying.
+            const alt = bestLegalUnload(p);
+            if (alt.points > pilePts && alt.rank){
+              const fuQty = countFaceUpRank(p, alt.rank);
+              const hQty  = countHandRank(p,  alt.rank);
+              return playCards(p, alt.rank, fuQty ? 'faceUp' : 'hand', fuQty + hQty, fuQty > 0, hQty > 0);
+            }
+
+            // Otherwise allow the original value-trade overplay.
             const higherFU3 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
             if(higherFU3.length) return playCards(p, higherFU3[0], 'faceUp', 1);
 
