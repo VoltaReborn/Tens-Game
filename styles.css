@@ -1,11 +1,3 @@
-/* =========================================================
-   Tens — styles.css (cleaned + consolidated)
-   Notes:
-   - Visuals preserved
-   - Toggle ON color now derived from --felt (no more fixed yellow)
-   - Removed duplicates / dead rules
-   ========================================================= */
-
 /* Dev helper */
 #runTests.dev{ display:inline-block !important; }
 
@@ -179,7 +171,9 @@ button, .card.playable{ touch-action: manipulation }
   background: color-mix(in srgb, var(--felt) 85%, black); /* themed */
   border:1px solid var(--chrome-border);
   border-radius:14px; padding:14px; max-width:560px; width:92vw; color:var(--ivory);
-  box-shadow:0 10px 40px rgba(0,0,0,.45)
+  box-shadow:0 10px 40px rgba(0,0,0,.45);
+  max-height: 80vh;
+  overflow: auto;
 }
 .modal h3{ margin:0 0 8px 0 }
 .modal .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 0 }
@@ -189,6 +183,13 @@ button, .card.playable{ touch-action: manipulation }
 #roundModal .content{ max-width:720px }
 .accordion .item{ border-top:1px solid rgba(255,255,255,.12); padding:8px 0 }
 .accordion .item h4{ margin:0; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer }
+
+#roundModal .actions{
+  position: sticky;
+  bottom: 0;
+  background: inherit;
+  padding-top: 8px;
+}
 
 /* ---------- MINI PILE ---------- */
 #miniPile{

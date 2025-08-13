@@ -1568,6 +1568,7 @@ function forfeitMatch(){ if(!state.roundActive && !state.matchActive) return; st
 function showEndOfRoundModal(finisher, roundPoints){
   return new Promise(function(resolve){
     const modal = document.getElementById('roundModal');
+    const content = modal.querySelector('.content');
     const body  = document.getElementById('roundBody');
     const title = document.getElementById('roundTitle');
     const okBtn = document.getElementById('roundOk');
@@ -1588,7 +1589,7 @@ function showEndOfRoundModal(finisher, roundPoints){
     state.players.forEach(function(p,idx){
       const item=document.createElement('div'); item.className='item';
       const head = document.createElement('h4');
-      head.className = 'roundHead'; // grid/flex header
+      head.className = 'roundHead';
       const pts = roundPoints[idx];
 
       const nameEl = document.createElement('span');
@@ -1601,7 +1602,6 @@ function showEndOfRoundModal(finisher, roundPoints){
 
       head.append(nameEl, ptsEl);
       item.append(head);
-
 
       const bodyRow=document.createElement('div'); bodyRow.style.display='none';
       const sec=function(label,cards){
@@ -1620,6 +1620,27 @@ function showEndOfRoundModal(finisher, roundPoints){
     });
     body.append(acc);
 
+    // --- INLINE STATS PANEL (hidden by default; toggled by "View Stats") ---
+    let statsInline = document.getElementById('roundStatsInline');
+    if(!statsInline){
+      statsInline = document.createElement('div');
+      statsInline.id = 'roundStatsInline';
+      statsInline.style.display = 'none';
+      statsInline.innerHTML = `
+        <div class="sectionTitle" style="margin-top:10px">Match Stats</div>
+        <div class="row" style="gap:8px">
+          <span>Player</span>
+          <select id="statsPlayerInline"></select>
+        </div>
+        <div id="statsChartInline" style="margin-top:8px"></div>
+        <div id="statsTotalsInline" class="stats-totals" style="margin-top:10px"></div>
+      `;
+      // insert just before actions row so it stays above the sticky footer
+      content.insertBefore(statsInline, actions);
+    } else {
+      statsInline.style.display = 'none';
+    }
+
     const matchOver = state.players.some(function(p){return p.score>=150;});
     if(matchOver){
       // Winner is lowest score
@@ -1627,7 +1648,6 @@ function showEndOfRoundModal(finisher, roundPoints){
         .sort((a,b)=>a.score - b.score);
       const winner = sorted[0];
 
-      // Title grammar: "You win!" vs "<Name> wins!"
       const winnerText = winner.isHuman || /^you$/i.test(winner.name) ? 'You win!' : (winner.name + ' wins!');
       title.textContent = 'Match Over! ' + winnerText;
 
@@ -1637,10 +1657,8 @@ function showEndOfRoundModal(finisher, roundPoints){
       sorted.forEach((p, idx) => {
         const entry = document.createElement('div');
         entry.className = 'podium-entry';
-
         const medal = idx===0 ? '🥇' : idx===1 ? '🥈' : idx===2 ? '🥉' : '🏅';
         const place = (idx===0?'1st':idx===1?'2nd':idx===2?'3rd':(idx+1)+'th');
-
         entry.innerHTML = `
           <div class="podium-medal" title="${place}">${medal}</div>
           <div class="podium-name">${p.name}</div>
@@ -1652,34 +1670,25 @@ function showEndOfRoundModal(finisher, roundPoints){
       finalScoresBox.append(podium);
       finalScoresBox.style.display = 'block';
 
-            // Append expanded stats below the podium
-      let gameStats = document.getElementById('gameStats');
-      if (!gameStats){
-        gameStats = document.createElement('div');
-        gameStats.id = 'gameStats';
-        finalScoresBox.appendChild(gameStats);
-      }
-      renderMatchStats(gameStats);
-
-      // Buttons: Start New Game + View Board
+      // Buttons: Start New Game + View Board + View Stats (inline)
       okBtn.style.display = 'none';
       startNewBtn.style.display = '';
       viewBoardBtn.style.display = '';
 
-      // NEW: View Stats button
+      // Ensure a "View Stats" button exists and toggles inline panel
       let statsBtn = document.getElementById('roundViewStats');
       if(!statsBtn){
         statsBtn = document.createElement('button');
         statsBtn.id = 'roundViewStats';
         statsBtn.textContent = 'View Stats';
-        actions.insertBefore(statsBtn, startNewBtn); // before Start New Game
+        actions.insertBefore(statsBtn, startNewBtn);
       }else{
         statsBtn.style.display = '';
+        statsBtn.textContent = 'View Stats';
       }
 
       startNewBtn.onclick = function(){
         modal.style.display = 'none';
-        // Start a brand new game with current player count
         startNewRound();
         resolve();
       };
@@ -1687,9 +1696,27 @@ function showEndOfRoundModal(finisher, roundPoints){
         modal.style.display = 'none';
         resolve();
       };
+
+      // Toggle inline stats on click
       statsBtn.onclick = function(){
-        openStatsModal();
+        const showing = statsInline.style.display === 'block';
+        if (showing){
+          statsInline.style.display = 'none';
+          statsBtn.textContent = 'View Stats';
+        } else {
+          statsInline.style.display = 'block';
+          // Render into inline targets
+          renderStatsInto({
+            sel: document.getElementById('statsPlayerInline'),
+            chart: document.getElementById('statsChartInline'),
+            totals: document.getElementById('statsTotalsInline')
+          });
+          statsBtn.textContent = 'Hide Stats';
+          // Scroll stats into view if needed
+          statsInline.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
       };
+
     } else {
       // Ongoing match: normal next-round button
       title.textContent = 'Round complete! ' + finisher.name + ' went out!';
@@ -1698,7 +1725,6 @@ function showEndOfRoundModal(finisher, roundPoints){
       startNewBtn.style.display = 'none';
       viewBoardBtn.style.display = 'none';
 
-      // Hide stats button if it exists
       const statsBtn = document.getElementById('roundViewStats');
       if(statsBtn) statsBtn.style.display = 'none';
 
@@ -1717,27 +1743,7 @@ function openStatsModal(){
   const sel   = document.getElementById('statsPlayer');
   const chart = document.getElementById('statsChart');
 
-  // Build player list
-  sel.innerHTML = '';
-  state.players.forEach((p, idx)=>{
-    const opt = document.createElement('option');
-    opt.value = String(idx);
-    opt.textContent = p.name;
-    sel.appendChild(opt);
-  });
-
-  function drawFor(playerIndex){
-    const series = state.roundHistory.map(r => r[playerIndex] || 0);
-    renderLineChart(chart, series);
-  }
-
-  sel.onchange = ()=> drawFor(parseInt(sel.value,10));
-
-  // default to "You" if present, else first
-  sel.value = '0';
-  drawFor(0);
-
-    // Totals area for pickups
+  // Create/locate totals box
   let totalsBox = document.getElementById('statsTotals');
   if(!totalsBox){
     totalsBox = document.createElement('div');
@@ -1746,14 +1752,14 @@ function openStatsModal(){
     totalsBox.className = 'stats-totals';
     chart.parentElement.appendChild(totalsBox);
   }
-  renderPickupTotals(totalsBox);
 
+  renderStatsInto({ sel, chart, totals: totalsBox });
 
   modal.style.display = 'flex';
-
   document.getElementById('statsClose').onclick = ()=>{ modal.style.display='none'; };
   document.querySelector('#statsModal .backdrop').onclick = ()=>{ modal.style.display='none'; };
 }
+
 
 // Simple SVG line chart: y = points that round
 function renderLineChart(container, values){
@@ -1833,6 +1839,35 @@ function renderMatchStats(container){
       </div>
     </div>
   `;
+}
+
+// Render stats UI into provided elements (inline in round modal OR the old stats modal)
+function renderStatsInto(targets){
+  const { sel, chart, totals } = targets; // sel: <select>, chart: container, totals: container
+
+  // Build player list
+  sel.innerHTML = '';
+  state.players.forEach((p, idx)=>{
+    const opt = document.createElement('option');
+    opt.value = String(idx);
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+
+  function drawFor(idx){
+    const i = parseInt(idx, 10) || 0;
+    const series = state.roundHistory.map(r => r[i] || 0);
+    renderLineChart(chart, series);
+  }
+
+  sel.onchange = ()=> drawFor(sel.value);
+  sel.value = '0';
+  drawFor('0');
+
+  // Totals for pickups (match)
+  if (totals){
+    renderPickupTotals(totals);
+  }
 }
 
 // ===== Hint =====
