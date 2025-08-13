@@ -107,7 +107,21 @@ const state = {
   aiAdaptive: 'medium',
   uiLock: false,           // ← lock human input during forced flows (e.g., blind flip)
   roundHistory: [],         // ← NEW: per-round points history [ [p0,p1,...], [p0,p1,...], ... ]
-  pickupsTotal: new Map(), 
+  pickupsTotal: new Map(),
+  matchStats: {
+  // global pile/clear aggregates
+  pile: { clearCount:0, sizeSum:0, largestSize:0, largestPoints:0 },
+  clears: { byTen:0, byFourKind:0 },
+  // per-player maps by id
+  perPlayer: new Map(), // id -> {
+                        //   tens:0, aces:0, twos:0,
+                        //   fourKindClears:0,
+                        //   largestUnload:0,
+                        //   safeStreak:0, maxSafeStreak:0,
+                        //   blindSuccess:0, blindFail:0,
+                        //   pickups:0
+                        // }
+  },
 };
 
 function freshPlayers(n){
@@ -127,6 +141,12 @@ function resetMatch(){
   state.warnedAt.clear();
   state.roundHistory = []; // ← reset stats history
   state.pickupsTotal = new Map();
+  state.matchStats = {
+  pile: { clearCount:0, sizeSum:0, largestSize:0, largestPoints:0 },
+  clears: { byTen:0, byFourKind:0 },
+  perPlayer: new Map()
+};
+
 }
 
 // ===== Deal (ensure 11 hand + 4 up/4 down) =====
@@ -558,25 +578,107 @@ function showPicker(rank, source, max) {
 }
 
 // ===== Play Logic =====
-async function playCards(player,rank,source,count,includeFU,includeHand){ includeFU=!!includeFU; includeHand=!!includeHand; const isTen=(rank==='10'); const rv=RVAL[rank]; const prevLabel=labelActive();
+// ===== Play Logic =====
+async function playCards(player,rank,source,count,includeFU,includeHand){
+  includeFU=!!includeFU; includeHand=!!includeHand;
+  const isTen=(rank==='10'); const rv=RVAL[rank];
+  const prevLabel=labelActive();
+
+  // Overplay → forced pickup (same player continues)
   if(!isTen && state.currentValue!==null && rv>state.currentValue){
-    const pileBefore=state.pile.slice(); const attempted=Array.from({length:count},function(){return {r:rank,s:'♠'};});
+    const pileBefore=state.pile.slice();
+    const attempted=Array.from({length:count},()=>({r:rank,s:'♠'}));
     logAction(player.name+' overplays with '+rank+'×'+count+' (was '+prevLabel+'); picks up.',{snapshotCards:[].concat(pileBefore,attempted)});
     await maybePauseBefore('pickup',[].concat(pileBefore,attempted),player.name);
-    if(state.pile.length){ player.hand.push.apply(player.hand,state.pile.filter(Boolean)); }
-    if(source==='faceUp'){ const moved=removeFaceUpOfRank(player,rank,count); if(moved.length) player.hand.push.apply(player.hand,moved); }
+
+    if(state.pile.length){
+      player.hand.push(...state.pile.filter(Boolean));
+    }
+    if(source==='faceUp'){
+      const moved=removeFaceUpOfRank(player,rank,count);
+      if(moved.length) player.hand.push(...moved);
+    }
     state.pile = [];
-    state.currentValue=null; state.currentCount=0; incPickup(player); render(); await sleep(200); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true);
+    state.currentValue=null; state.currentCount=0;
+
+    incPickup(player);                // ← keeps existing pickup accounting
+    render(); await sleep(200);
+    return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true);
   }
-  let played=[]; if(source==='hand'){ let moved=0; const rest=[]; for(const c of player.hand){ if(c && moved<count && c.r===rank){ played.push(c); moved++; } else rest.push(c); } player.hand=rest; if(includeFU && moved<count){ const need=count-moved; const extra=removeFaceUpOfRank(player,rank,need); played.push.apply(played,extra); } }
-  else if(source==='faceUp'){ const removed=removeFaceUpOfRank(player,rank,count); played.push.apply(played,removed); if(includeHand && removed.length<count){ const need=count-removed.length; let moved=0; const rest=[]; for(const c of player.hand){ if(c && moved<need && c.r===rank){ played.push(c); moved++; } else rest.push(c); } player.hand=rest; } }
-  else if(source==='faceDownReveal'){ /* handled elsewhere */ }
-  if(isTen){ logAction(player.name+' plays '+rank+' from '+source+'; was '+prevLabel+' → clear.',{snapshotCards:[].concat(state.pile.slice(),played)}); }
-  else { logAction(player.name+' plays '+rank+'×'+played.length+' from '+source+(includeFU?'+face-up':'')+(includeHand?'+hand':'')+'; was '+prevLabel+'.',{snapshotCards:[].concat(state.pile.slice(),played)}); }
-  state.pile.push.apply(state.pile,played);
-  if(isTen){ const snap=state.pile.slice(); await maybePauseBefore('clear',snap,player.name); await clearPile(player,'10'); if(hasCards(player)) { await sleep(180); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true); } }
-  else { if(state.currentValue===rv) state.currentCount+=played.length; else { state.currentValue=rv; state.currentCount=played.length; } if(state.currentCount>=4){ const snap2=state.pile.slice(); await maybePauseBefore('clear',snap2,player.name); await clearPile(player,rank+' reached '+state.currentCount); if(hasCards(player)) { await sleep(180); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true); } } }
-  maybeDeclare(player); logBoardState(); endOrNext(); }
+
+  // Move selected cards into `played`
+  let played=[];
+  if(source==='hand'){
+    let moved=0; const rest=[];
+    for(const c of player.hand){
+      if(c && moved<count && c.r===rank){ played.push(c); moved++; }
+      else rest.push(c);
+    }
+    player.hand=rest;
+    if(includeFU && moved<count){
+      const need=count-moved;
+      const extra=removeFaceUpOfRank(player,rank,need);
+      played.push(...extra);
+    }
+  } else if(source==='faceUp'){
+    const removed=removeFaceUpOfRank(player,rank,count);
+    played.push(...(removed||[]));
+    if(includeHand && removed.length<count){
+      const need=count-removed.length;
+      let moved=0; const rest=[];
+      for(const c of player.hand){
+        if(c && moved<need && c.r===rank){ played.push(c); moved++; }
+        else rest.push(c);
+      }
+      player.hand=rest;
+    }
+  } else if(source==='faceDownReveal'){
+    /* handled elsewhere */
+  }
+
+  // ---- NEW: record ranks & unload for this action ----
+  noteRanksPlayed(player.id, played);
+  noteUnload(player.id, played);
+  // ----------------------------------------------------
+
+  if(isTen){
+    logAction(player.name+' plays '+rank+' from '+source+'; was '+prevLabel+' → clear.',{snapshotCards:[].concat(state.pile.slice(),played)});
+  } else {
+    logAction(
+      player.name+' plays '+rank+'×'+played.length+' from '+source+(includeFU?'+face-up':'')+(includeHand?'+hand':'')+'; was '+prevLabel+'.',
+      {snapshotCards:[].concat(state.pile.slice(),played)}
+    );
+  }
+
+  state.pile.push(...played);
+
+  if(isTen){
+    const snap=state.pile.slice();
+    await maybePauseBefore('clear',snap,player.name);
+    await clearPile(player,'10');                // noteClear() happens inside clearPile
+    if(hasCards(player)) { await sleep(180); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true); }
+  } else {
+    if(state.currentValue===rv) state.currentCount+=played.length;
+    else { state.currentValue=rv; state.currentCount=played.length; }
+
+    if(state.currentCount>=4){
+      const snap2=state.pile.slice();
+      await maybePauseBefore('clear',snap2,player.name);
+      await clearPile(player,rank+' reached '+state.currentCount); // noteClear() happens inside clearPile
+      if(hasCards(player)) { await sleep(180); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true); }
+    }
+  }
+
+  // ---- NEW: safe turn bump (only when it wasn't a clear or pickup) ----
+  if (!(isTen) && !(state.currentCount >= 4)) {
+    bumpSafe(player.id, 1);
+  }
+  // --------------------------------------------------------------------
+
+  maybeDeclare(player);
+  logBoardState();
+  endOrNext();
+}
 
 function maybeDeclare(p){
   const remaining = p.hand.filter(Boolean).length + faceUpCards(p).length + faceDownCount(p);
@@ -621,7 +723,7 @@ async function tryFlipFaceDownSlot(slotIdx){
   const s = p.slots[slotIdx];
   if(!s || s.up || !s.down) return;
 
-  const c = s.down;         // the blind card
+  const c = s.down;   // the blind card
   s.down = null;
   if(!c){ render(); return; }
 
@@ -644,13 +746,18 @@ async function tryFlipFaceDownSlot(slotIdx){
       await maybePauseBefore('pickup', show, p.name);
 
       if(state.pile.length){
-        p.hand.push.apply(p.hand, state.pile.filter(Boolean));
+        p.hand.push(...state.pile.filter(Boolean));
       }
       state.pile = [];
       p.hand.push(c);
       state.currentValue = null;
       state.currentCount = 0;
+
       incPickup(p);
+      // ---- NEW: mark blind fail ----
+      ensurePStats(p.id).blindFail++;
+      // ------------------------------
+
       render();
       logBoardState();
       await sleep(80);
@@ -660,13 +767,22 @@ async function tryFlipFaceDownSlot(slotIdx){
     // Otherwise, the flipped card is immediately played
     logAction(p.name+' flips '+c.r+(isHuman?'':' (AI)')+'; was '+prevLabel+'.',
               {snapshotCards:[].concat(state.pile.slice(),[c])});
+
     state.pile.push(c);
+
+    // ---- NEW: record the flipped card as played/unloaded ----
+    noteRanksPlayed(p.id, [c]);
+    noteUnload(p.id, [c]);
+    // ---------------------------------------------------------
 
     // Blind 10 clears → same player must continue
     if(c.r === '10'){
       const snap = state.pile.slice();
       await maybePauseBefore('clear', snap, p.name);
-      await clearPile(p, '10 (blind)');
+      await clearPile(p, '10 (blind)');   // noteClear() bumps safe inside
+      // ---- NEW: blind success ----
+      ensurePStats(p.id).blindSuccess++;
+      // ----------------------------
       if(hasCards(p)){
         await sleep(160);
         return isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
@@ -677,7 +793,7 @@ async function tryFlipFaceDownSlot(slotIdx){
       else if(rv === state.currentValue){ state.currentCount += 1; }
       else { state.currentValue = rv; state.currentCount = 1; }
 
-            // Human may add same-rank extras
+      // Human may add same-rank extras, or AI auto-adds
       if (isHuman){
         const special = (c.r==='A' || c.r==='2' || c.r==='10');
         const fuQty = countFaceUpRank(p, c.r);
@@ -689,18 +805,25 @@ async function tryFlipFaceDownSlot(slotIdx){
             const extraFU = removeFaceUpOfRank(p, c.r, fuQty);
             state.pile.push(...extraFU);
             state.currentCount += extraFU.length;
+            // ---- NEW: stats for extras ----
+            noteRanksPlayed(p.id, extraFU);
+            noteUnload(p.id, extraFU);
           }
           if (hQty > 0){
             let moved = 0, rest = [];
+            const handAdds = [];
             for (const x of p.hand){
-              if (x && x.r === c.r){ state.pile.push(x); moved++; }
+              if (x && x.r === c.r){ state.pile.push(x); moved++; handAdds.push(x); }
               else rest.push(x);
             }
             p.hand = rest;
             state.currentCount += moved;
+            // ---- NEW: stats for extras ----
+            noteRanksPlayed(p.id, handAdds);
+            noteUnload(p.id, handAdds);
           }
         } else if (fuQty > 0 || hQty > 0){
-          // Manual picker (existing UX)
+          // Manual picker
           const choice = await showRevealChoicePicker(c.r, fuQty, hQty);
           if(choice){
             let toAdd = choice.count - 1;
@@ -710,39 +833,63 @@ async function tryFlipFaceDownSlot(slotIdx){
               const extraFU = removeFaceUpOfRank(p, c.r, takeFU);
               state.pile.push(...extraFU);
               state.currentCount += extraFU.length;
+              // ---- NEW: stats for extras ----
+              noteRanksPlayed(p.id, extraFU);
+              noteUnload(p.id, extraFU);
               toAdd -= extraFU.length;
             }
 
             if(choice.useHand && hQty > 0 && toAdd > 0){
               let moved = 0, rest = [];
+              const handAdds = [];
               for(const x of p.hand){
-                if(x && moved < toAdd && x.r === c.r){ state.pile.push(x); moved++; }
+                if(x && moved < toAdd && x.r === c.r){ state.pile.push(x); moved++; handAdds.push(x); }
                 else rest.push(x);
               }
               p.hand = rest;
               state.currentCount += moved;
+              // ---- NEW: stats for extras ----
+              noteRanksPlayed(p.id, handAdds);
+              noteUnload(p.id, handAdds);
             }
           }
         }
       } else {
         // AI auto-adds all same-rank extras
         const canFU = removeFaceUpOfRank(p, c.r, 99);
-        if(canFU.length){ state.pile.push(...canFU); state.currentCount += canFU.length; }
+        if(canFU.length){
+          state.pile.push(...canFU); state.currentCount += canFU.length;
+          // ---- NEW: stats for extras ----
+          noteRanksPlayed(p.id, canFU);
+          noteUnload(p.id, canFU);
+        }
         let addH = [], rest = [];
         for(const x of p.hand){ if(x && x.r === c.r) addH.push(x); else rest.push(x); }
         p.hand = rest;
-        if(addH.length){ state.pile.push(...addH); state.currentCount += addH.length; }
+        if(addH.length){
+          state.pile.push(...addH); state.currentCount += addH.length;
+          // ---- NEW: stats for extras ----
+          noteRanksPlayed(p.id, addH);
+          noteUnload(p.id, addH);
+        }
       }
 
       // Four-or-more clears → same player must continue
       if(state.currentCount >= 4){
         const snap2 = state.pile.slice();
         await maybePauseBefore('clear', snap2, p.name);
-        await clearPile(p, c.r+' reached '+state.currentCount);
+        await clearPile(p, c.r+' reached '+state.currentCount);  // noteClear() bumps safe inside
+        // ---- NEW: blind success ----
+        ensurePStats(p.id).blindSuccess++;
+        // ----------------------------
         if(hasCards(p)){
           await sleep(160);
           return isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
         }
+      } else {
+        // ---- NEW: safe blind flip that neither cleared nor picked up ----
+        bumpSafe(p.id, 1);
+        // ----------------------------------------------------------------
       }
     }
 
@@ -902,6 +1049,9 @@ async function clearPile(byPlayer, reason){
   if (state.pile.length){
     const pileBefore = state.pile.slice();
     logAction(byPlayer.name + ' clears the pile (' + reason + ').', { snapshotCards: pileBefore });
+
+    // NEW: record clear stats BEFORE we zero the pile
+    noteClear(byPlayer, reason || '');
 
     const mode = (settings && settings.clearAnim) || 'fade';
     if (mode !== 'none') {
@@ -1502,6 +1652,14 @@ function showEndOfRoundModal(finisher, roundPoints){
       finalScoresBox.append(podium);
       finalScoresBox.style.display = 'block';
 
+            // Append expanded stats below the podium
+      let gameStats = document.getElementById('gameStats');
+      if (!gameStats){
+        gameStats = document.createElement('div');
+        gameStats.id = 'gameStats';
+        finalScoresBox.appendChild(gameStats);
+      }
+      renderMatchStats(gameStats);
 
       // Buttons: Start New Game + View Board
       okBtn.style.display = 'none';
@@ -1634,6 +1792,47 @@ function renderPickupTotals(container){
     return `<div class="st-row"><span class="st-name">${p.name}</span><span class="st-val">${n}</span></div>`;
   }).join('');
   container.innerHTML = `<div class="st-title">Total pile pick-ups (match)</div>${rows}`;
+}
+
+function renderMatchStats(container){
+  // global aggregates
+  const P = state.matchStats.pile;
+  const C = state.matchStats.clears;
+
+  // human-focused stats (player 0 if present)
+  const you = state.players[0];
+  const yp  = you ? ensurePStats(you.id) : null;
+
+  const avgSize = P.clearCount ? (P.sizeSum / P.clearCount).toFixed(1) : '0';
+
+  container.innerHTML = `
+    <div class="stats-container">
+      <div class="stats-column">
+        <h4>Pile Stats</h4>
+        <div class="stat-row"><span class="stat-name">Total Pickups</span><span class="stat-value">${[...state.matchStats.perPlayer.values()].reduce((s,p)=>s+p.pickups,0)}</span></div>
+        <div class="stat-row"><span class="stat-name">Avg Pile Size</span><span class="stat-value">${avgSize} cards</span></div>
+        <div class="stat-row"><span class="stat-name">Largest Pile</span><span class="stat-value">${P.largestSize} cards / ${P.largestPoints} pts</span></div>
+        <div class="stat-row"><span class="stat-name">Clears by 10</span><span class="stat-value">${C.byTen}</span></div>
+        <div class="stat-row"><span class="stat-name">Clears by 4-of-a-kind</span><span class="stat-value">${C.byFourKind}</span></div>
+      </div>
+
+      <div class="stats-column">
+        <h4>Card Play (You)</h4>
+        <div class="stat-row"><span class="stat-name">10s Played</span><span class="stat-value">${yp?yp.tens:0}</span></div>
+        <div class="stat-row"><span class="stat-name">Aces Played</span><span class="stat-value">${yp?yp.aces:0}</span></div>
+        <div class="stat-row"><span class="stat-name">2s Played</span><span class="stat-value">${yp?yp.twos:0}</span></div>
+        <div class="stat-row"><span class="stat-name">4-of-a-Kind Clears</span><span class="stat-value">${yp?yp.fourKindClears:0}</span></div>
+      </div>
+
+      <div class="stats-column">
+        <h4>Highlights (You)</h4>
+        <div class="stat-row"><span class="stat-name">Largest Unload</span><span class="stat-value">${yp?yp.largestUnload:0} pts</span></div>
+        <div class="stat-row"><span class="stat-name">Longest Safe Streak</span><span class="stat-value">${yp?yp.maxSafeStreak:0}</span></div>
+        <div class="stat-row"><span class="stat-name">Successful Blind Flips</span><span class="stat-value">${yp?yp.blindSuccess:0}</span></div>
+        <div class="stat-row"><span class="stat-name">Failed Blind Flips</span><span class="stat-value">${yp?yp.blindFail:0}</span></div>
+      </div>
+    </div>
+  `;
 }
 
 // ===== Hint =====
@@ -1957,14 +2156,86 @@ function initMiniObserver(){
 }
 
 function incPickup(p){
+  // per-round (existing)
   const m = state.roundStats && state.roundStats.pickups;
   if (m){
     const prev = m.get(p.id) || 0;
     m.set(p.id, prev + 1);
   }
-  // cumulative
+  // cumulative (existing)
   const tot = state.pickupsTotal.get(p.id) || 0;
   state.pickupsTotal.set(p.id, tot + 1);
+
+  // match stats (new)
+  const ps = ensurePStats(p.id);
+  ps.pickups++;
+  resetSafe(p.id);
+}
+
+function ensurePStats(pid){
+  let ps = state.matchStats.perPlayer.get(pid);
+  if (!ps){
+    ps = {
+      tens:0, aces:0, twos:0,
+      fourKindClears:0,
+      largestUnload:0,
+      safeStreak:0, maxSafeStreak:0,
+      blindSuccess:0, blindFail:0,
+      pickups:0
+    };
+    state.matchStats.perPlayer.set(pid, ps);
+  }
+  return ps;
+}
+function bumpSafe(pid, amount){
+  const ps = ensurePStats(pid);
+  ps.safeStreak += (amount || 1);
+  if (ps.safeStreak > ps.maxSafeStreak) ps.maxSafeStreak = ps.safeStreak;
+}
+function resetSafe(pid){
+  const ps = ensurePStats(pid);
+  ps.safeStreak = 0;
+}
+function noteUnload(pid, cards){
+  // cards: array of played cards this turn (only the ones actively played by user input)
+  if (!cards || !cards.length) return;
+  const pts = cards.reduce((s,c)=> s + scoringValue(c.r), 0);
+  const ps  = ensurePStats(pid);
+  if (pts > ps.largestUnload) ps.largestUnload = pts;
+}
+function noteRanksPlayed(pid, cards){
+  if (!cards) return;
+  const ps = ensurePStats(pid);
+  cards.forEach(c=>{
+    if (!c) return;
+    if (c.r === '10') ps.tens++;
+    else if (c.r === 'A') ps.aces++;
+    else if (c.r === '2') ps.twos++;
+  });
+}
+function noteClear(byPlayer, reason){
+  // reason: '10', '10 (blind)', or 'X reached N'
+  const size = state.pile.filter(Boolean).length;
+  const points = state.pile.reduce((s,c)=> s + (c ? scoringValue(c.r) : 0), 0);
+
+  // global pile aggregates
+  const P = state.matchStats.pile;
+  P.clearCount++;
+  P.sizeSum += size;
+  if (size > P.largestSize)   P.largestSize = size;
+  if (points > P.largestPoints) P.largestPoints = points;
+
+  // clear types
+  const tenClear = /^10/.test(reason || '');
+  if (tenClear) state.matchStats.clears.byTen++;
+  else          state.matchStats.clears.byFourKind++;
+
+  // per-player counters
+  const ps = ensurePStats(byPlayer.id);
+  if (!tenClear) ps.fourKindClears++;
+
+  // clearing is a "safe" outcome
+  bumpSafe(byPlayer.id, 1);
 }
 
 // ===== Controls & Tests =====

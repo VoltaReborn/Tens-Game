@@ -435,6 +435,30 @@ button, .card.playable{ touch-action: manipulation }
 .stats-totals .st-name{ opacity:.95 }
 .stats-totals .st-val{ font-weight:700 }
 
+/* ---------- END-OF-GAME STATS (3-column) ---------- */
+.stats-container{
+  display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;
+}
+.stats-column{
+  flex:1 1 240px;
+  background: rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:12px;
+  padding:10px;
+}
+.stats-column h4{
+  margin:0 0 8px 0;
+  font-size:14px;
+  color: var(--accent);
+}
+.stat-row{
+  display:flex; justify-content:space-between; gap:10px;
+  padding:4px 0; border-top:1px solid rgba(255,255,255,.10);
+}
+.stat-row:first-of-type{ border-top:none }
+.stat-name{ opacity:.92 }
+.stat-value{ font-weight:700; color: var(--gold) }
+
 /* Tabs header inside settings */
 .tabs{
   display:flex; gap:8px; margin:6px 0 10px;
