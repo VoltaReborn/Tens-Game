@@ -191,6 +191,13 @@ button, .card.playable{ touch-action: manipulation }
   padding-top: 8px;
 }
 
+/* Ensure tall round/stats content scrolls */
+#roundModal .content,
+#statsModal   .content{
+  max-height: 80vh;
+  overflow: auto;
+}
+
 /* ---------- MINI PILE ---------- */
 #miniPile{
   position: fixed; right:10px; top:10px; z-index:50; display:none;

@@ -1335,63 +1335,77 @@ async function aiTakeTurn(p, chain){
       return endOrNext();
     }
 
-    // ===== “hard/expert” early-pressure branches (unchanged logic) =====
-    if((diff==='hard'||diff==='expert') && state.currentValue!==null){
-      const counts=pileCounts(); const distinct=Object.keys(counts).length;
-      const onlyAces = distinct===1 && counts['A']>0;
-      const single3 = distinct===1 && counts['3']===1;
-      const few2s = distinct===1 && counts['2']>=1 && counts['2']<=3;
+    // ===== “hard/expert” early-pressure branches (smarter value-trade) =====
+if ((diff==='hard'||diff==='expert') && state.currentValue!==null){
+  const counts = pileCounts();
+  const distinct = Object.keys(counts).length;
+  const onlyAces = distinct===1 && counts['A']>0;
+  const single3  = distinct===1 && counts['3']===1;
+  const few2s    = distinct===1 && counts['2']>=1 && counts['2']<=3;
 
-      if(onlyAces){
-        const higherFU = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r]>1);
-        if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
+  // helper: best legal unload right now (non-10, respects cap)
+  function bestLegalUnloadPointsNow(player){
+    const ranks = new Set();
+    faceUpCards(player).forEach(c=>ranks.add(c.r));
+    player.hand.forEach(c=>{ if(c&&c.r) ranks.add(c.r); });
+    let best = 0;
+    ranks.forEach(r=>{
+      if (r === '10') return;                // don't compare to 10
+      if (!canPlayRank(r)) return;           // must be legal under cap
+      const copies = countFaceUpRank(player, r) + countHandRank(player, r);
+      const pts = copies * scoringValue(r);
+      if (pts > best) best = pts;
+    });
+    return best;
+  }
 
-        const idx1 = p.slots.findIndex(s => s && !s.up && s.down);
-        if(idx1>=0) return tryFlipFaceDownSlot(idx1);
+  if (onlyAces){
+    const higherFU = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > 1);
+    if (higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
 
-        const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r]>1);
-        if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
-      }
+    const idx1 = p.slots.findIndex(s => s && !s.up && s.down);
+    if (idx1>=0) return tryFlipFaceDownSlot(idx1);
 
-      if(single3 || few2s){
-        const higherFU2 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
-        if(higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
+    const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > 1);
+    if (higherH.length) return playCards(p, higherH[0], 'hand', 1);
+  }
 
-        const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
-        if(higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
+  if (single3 || few2s){
+    const higherFU2 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
+    if (higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
 
-        const j = p.slots.findIndex(s => s && !s.up && s.down);
-        if(j>=0) return tryFlipFaceDownSlot(j);
-      }
+    const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
+    if (higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
 
-      if(diff==='expert'){
-        const counts3=pileCounts(); const distinct3=Object.keys(counts3).length;
-        if(distinct3<3){
-          const pilePts = pilePointsAdjustedForGuaranteedClear(p);
-          const unload  = maxUnloadGroupPoints(p);
-          if (unload > pilePts){
-            // NEW: if there is a legal non-overplay unload that already beats the pile,
-            // take that instead of overplaying.
-            const alt = bestLegalUnload(p);
-            if (alt.points > pilePts && alt.rank){
-              const fuQty = countFaceUpRank(p, alt.rank);
-              const hQty  = countHandRank(p,  alt.rank);
-              return playCards(p, alt.rank, fuQty ? 'faceUp' : 'hand', fuQty + hQty, fuQty > 0, hQty > 0);
-            }
+    const j = p.slots.findIndex(s => s && !s.up && s.down);
+    if (j>=0) return tryFlipFaceDownSlot(j);
+  }
 
-            // Otherwise allow the original value-trade overplay.
-            const higherFU3 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
-            if(higherFU3.length) return playCards(p, higherFU3[0], 'faceUp', 1);
+  // Expert-only "thin pile value trade"
+  if (diff==='expert'){
+    const distinct3 = distinct; // reuse
+    if (distinct3 < 3){
+      const pilePts   = pilePointsAdjustedForGuaranteedClear(p);
+      const unloadAny = maxUnloadGroupPoints(p);           // best unload ignoring legality
+      if (unloadAny > pilePts){
+        const legalBest = bestLegalUnloadPointsNow(p);     // best legal unload right now
+        // consider overplay candidates (one card), but ONLY if they unload MORE than legalBest
+        const overFU = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
+        const overH  = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
 
-            const higherH3 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
-            if(higherH3.length) return playCards(p, higherH3[0], 'hand', 1);
+        const pickFU = overFU.find(r => scoringValue(r) > legalBest);
+        if (pickFU) return playCards(p, pickFU, 'faceUp', 1);
 
-            const k = p.slots.findIndex(s => s && !s.up && s.down);
-            if(k>=0) return tryFlipFaceDownSlot(k);
-          }
-        }
+        const pickH = overH.find(r => scoringValue(r) > legalBest);
+        if (pickH) return playCards(p, pickH, 'hand', 1);
+
+        // otherwise, don't force a value-trade; try a safe flip
+        const k = p.slots.findIndex(s => s && !s.up && s.down);
+        if (k>=0) return tryFlipFaceDownSlot(k);
       }
     }
+  }
+}
 
     // ===== General play logic (unchanged for hard/expert) =====
     const fuNow = faceUpCards(p);
@@ -1424,33 +1438,59 @@ async function aiTakeTurn(p, chain){
     }}
 
     const hasTenHand = p.hand.some(c => c && c.r === '10');
-    const hasTenFU   = fu.some(c => c.r === '10');
-    if (hasTenHand || hasTenFU){
-      let use10 = false;
+const hasTenFU   = fu.some(c => c.r === '10');
+if (hasTenHand || hasTenFU){
+  let use10 = false;
 
-      if (diff === 'easy'){
-        // EASY: Never burn 10 on an empty pile unless it's the ONLY legal play.
-        const emptyPile = state.pile.length === 0;
-        const haveOtherLegal =
-          [...new Set(
-            p.hand.filter(c=>c&&c.r).map(c=>c.r)
-              .concat(fu.map(c=>c.r))
-          )].some(r => r !== '10' && canPlayRank(r));
+  // helper: best legal unload right now (non-10, respects cap)
+  function bestLegalUnloadPointsNow(player){
+    const ranks = new Set();
+    faceUpCards(player).forEach(c=>ranks.add(c.r));
+    player.hand.forEach(c=>{ if(c&&c.r) ranks.add(c.r); });
+    let best = 0;
+    ranks.forEach(r=>{
+      if (r === '10') return;
+      if (!canPlayRank(r)) return;
+      const copies = countFaceUpRank(player, r) + countHandRank(player, r);
+      const pts = copies * scoringValue(r);
+      if (pts > best) best = pts;
+    });
+    return best;
+  }
 
-        // Use 10 to dodge trouble: big pile, or nothing else plays.
-        use10 = (!emptyPile && pileLen >= 8) || (!haveOtherLegal);
-      } else if (diff === 'medium'){
-        use10 = oppClose || pileLen >= 10 || early;
-      } else {
-        const unloadPts = maxUnloadGroupPoints(p);
-        use10 = (!state.currentValue || pileLen >= 12 || early) && (oppClose ? unloadPts >= 15 : true);
-      }
+  if (diff === 'easy'){
+    // EASY: Never burn 10 on empty pile unless nothing else plays
+    const emptyPile = state.pile.length === 0;
+    const haveOtherLegal =
+      [...new Set(
+        p.hand.filter(c=>c&&c.r).map(c=>c.r)
+          .concat(fu.map(c=>c.r))
+      )].some(r => r !== '10' && canPlayRank(r));
+    use10 = (!emptyPile && pileLen >= 8) || (!haveOtherLegal);
+  } else if (diff === 'medium'){
+    use10 = oppClose || pileLen >= 10 || early;
+  } else {
+    // HARD/EXPERT baseline
+    const unloadPts = maxUnloadGroupPoints(p);
+    use10 = (!state.currentValue || pileLen >= 12 || early) &&
+            (oppClose ? unloadPts >= 15 : true);
 
-      if (use10){
-        if (hasTenHand) return playCards(p, '10', 'hand', 1);
-        else            return playCards(p, '10', 'faceUp', 1);
+    // EXPERT guard: don't waste a 10 on a tiny/low pile (1 × Ace/Two)
+    if (diff === 'expert'){
+      const tinyLowPile = (state.currentValue !== null && state.currentCount === 1 && state.currentValue <= 2);
+      if (tinyLowPile){
+        const legalBest = bestLegalUnloadPointsNow(p);
+        // if ANY legal unload exists, prefer that over burning a 10
+        if (legalBest > 0) use10 = false;
       }
     }
+  }
+
+  if (use10){
+    if (hasTenHand) return playCards(p, '10', 'hand', 1);
+    else            return playCards(p, '10', 'faceUp', 1);
+  }
+}
 
 
     const legalFU = [...new Set(fu.map(c=>c.r))].filter(r => canPlayRank(r));
@@ -1568,7 +1608,6 @@ function forfeitMatch(){ if(!state.roundActive && !state.matchActive) return; st
 function showEndOfRoundModal(finisher, roundPoints){
   return new Promise(function(resolve){
     const modal = document.getElementById('roundModal');
-    const content = modal.querySelector('.content');
     const body  = document.getElementById('roundBody');
     const title = document.getElementById('roundTitle');
     const okBtn = document.getElementById('roundOk');
@@ -1581,10 +1620,7 @@ function showEndOfRoundModal(finisher, roundPoints){
     finalScoresBox.innerHTML = '';
     finalScoresBox.style.display = 'none';
 
-    // Build accordion of end-of-round hands (unchanged)
-    let maxP=-1, minP=Infinity;
-    state.players.forEach(function(p){ const v=(state.roundStats.pickups.get(p.id)||0); maxP=Math.max(maxP,v); minP=Math.min(minP,v); });
-
+    // Accordion of end-of-round hands
     const acc=document.createElement('div'); acc.className='accordion';
     state.players.forEach(function(p,idx){
       const item=document.createElement('div'); item.className='item';
@@ -1620,40 +1656,29 @@ function showEndOfRoundModal(finisher, roundPoints){
     });
     body.append(acc);
 
-    // --- INLINE STATS PANEL (hidden by default; toggled by "View Stats") ---
-    let statsInline = document.getElementById('roundStatsInline');
-    if(!statsInline){
-      statsInline = document.createElement('div');
-      statsInline.id = 'roundStatsInline';
-      statsInline.style.display = 'none';
-      statsInline.innerHTML = `
-        <div class="sectionTitle" style="margin-top:10px">Match Stats</div>
-        <div class="row" style="gap:8px">
-          <span>Player</span>
-          <select id="statsPlayerInline"></select>
-        </div>
-        <div id="statsChartInline" style="margin-top:8px"></div>
-        <div id="statsTotalsInline" class="stats-totals" style="margin-top:10px"></div>
-      `;
-      // insert just before actions row so it stays above the sticky footer
-      content.insertBefore(statsInline, actions);
-    } else {
-      statsInline.style.display = 'none';
-    }
-
     const matchOver = state.players.some(function(p){return p.score>=150;});
+    // Ensure "View Stats" button exists exactly once
+    let statsBtn = document.getElementById('roundViewStats');
+    if(!statsBtn){
+      statsBtn = document.createElement('button');
+      statsBtn.id = 'roundViewStats';
+      statsBtn.textContent = 'View Stats';
+      actions.insertBefore(statsBtn, actions.firstChild);
+    } else {
+      statsBtn.style.display = '';
+    }
+    statsBtn.onclick = function(){ openStatsModal(); };
+
     if(matchOver){
-      // Winner is lowest score
+      // Winner is lowest total score
       const sorted = [...state.players].map(p => ({name:p.name, score:p.score, isHuman:!!p.isHuman}))
         .sort((a,b)=>a.score - b.score);
       const winner = sorted[0];
-
       const winnerText = winner.isHuman || /^you$/i.test(winner.name) ? 'You win!' : (winner.name + ' wins!');
       title.textContent = 'Match Over! ' + winnerText;
 
       const podium = document.createElement('div');
       podium.className = 'podium';
-
       sorted.forEach((p, idx) => {
         const entry = document.createElement('div');
         entry.className = 'podium-entry';
@@ -1666,27 +1691,12 @@ function showEndOfRoundModal(finisher, roundPoints){
         `;
         podium.append(entry);
       });
-
       finalScoresBox.append(podium);
       finalScoresBox.style.display = 'block';
 
-      // Buttons: Start New Game + View Board + View Stats (inline)
       okBtn.style.display = 'none';
       startNewBtn.style.display = '';
       viewBoardBtn.style.display = '';
-
-      // Ensure a "View Stats" button exists and toggles inline panel
-      let statsBtn = document.getElementById('roundViewStats');
-      if(!statsBtn){
-        statsBtn = document.createElement('button');
-        statsBtn.id = 'roundViewStats';
-        statsBtn.textContent = 'View Stats';
-        actions.insertBefore(statsBtn, startNewBtn);
-      }else{
-        statsBtn.style.display = '';
-        statsBtn.textContent = 'View Stats';
-      }
-
       startNewBtn.onclick = function(){
         modal.style.display = 'none';
         startNewRound();
@@ -1696,38 +1706,12 @@ function showEndOfRoundModal(finisher, roundPoints){
         modal.style.display = 'none';
         resolve();
       };
-
-      // Toggle inline stats on click
-      statsBtn.onclick = function(){
-        const showing = statsInline.style.display === 'block';
-        if (showing){
-          statsInline.style.display = 'none';
-          statsBtn.textContent = 'View Stats';
-        } else {
-          statsInline.style.display = 'block';
-          // Render into inline targets
-          renderStatsInto({
-            sel: document.getElementById('statsPlayerInline'),
-            chart: document.getElementById('statsChartInline'),
-            totals: document.getElementById('statsTotalsInline')
-          });
-          statsBtn.textContent = 'Hide Stats';
-          // Scroll stats into view if needed
-          statsInline.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      };
-
     } else {
-      // Ongoing match: normal next-round button
       title.textContent = 'Round complete! ' + finisher.name + ' went out!';
       okBtn.textContent = 'Start Next Round';
       okBtn.style.display = '';
       startNewBtn.style.display = 'none';
       viewBoardBtn.style.display = 'none';
-
-      const statsBtn = document.getElementById('roundViewStats');
-      if(statsBtn) statsBtn.style.display = 'none';
-
       okBtn.onclick = function(){
         modal.style.display = 'none';
         resolve();
@@ -1738,13 +1722,37 @@ function showEndOfRoundModal(finisher, roundPoints){
   });
 }
 
+
 function openStatsModal(){
   const modal = document.getElementById('statsModal');
   const sel   = document.getElementById('statsPlayer');
   const chart = document.getElementById('statsChart');
 
-  // Create/locate totals box
-  let totalsBox = document.getElementById('statsTotals');
+  // Build player list
+  sel.innerHTML = '';
+  state.players.forEach((p, idx)=>{
+    const opt = document.createElement('option');
+    opt.value = String(idx);
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+
+  // helpers derived from existing data
+  const rounds = state.roundHistory.length;
+  const seriesFor = (i)=> state.roundHistory.map(r => r[i] || 0);
+  const minIndex = arr => arr.reduce((m,v,i)=> (v<arr[m]?i:m), 0);
+  const sum = a => a.reduce((s,x)=>s+x,0);
+  const avg = a => a.length ? (sum(a)/a.length) : 0;
+
+  // build/ensure containers under chart
+  let keyBox   = document.getElementById('statsKey');
+  let totalsBox= document.getElementById('statsTotals');
+  if(!keyBox){
+    keyBox = document.createElement('div');
+    keyBox.id = 'statsKey';
+    keyBox.style.marginTop = '10px';
+    chart.parentElement.appendChild(keyBox);
+  }
   if(!totalsBox){
     totalsBox = document.createElement('div');
     totalsBox.id = 'statsTotals';
@@ -1753,13 +1761,52 @@ function openStatsModal(){
     chart.parentElement.appendChild(totalsBox);
   }
 
-  renderStatsInto({ sel, chart, totals: totalsBox });
+  function renderKeyStats(i){
+    const you   = state.players[i];
+    const rows  = state.roundHistory.map(r => r.map(v=>v||0));
+    const mine  = seriesFor(i);
+
+    // Win count = times you had the minimum points that round
+    const wins  = rows.filter(r => r[i] === Math.min.apply(null, r)).length;
+
+    const best  = mine.length ? Math.min.apply(null, mine) : 0;
+    const worst = mine.length ? Math.max.apply(null, mine) : 0;
+    const mean  = avg(mine);
+
+    const pickups = state.pickupsTotal.get(you.id) || 0;
+    const ppu     = rounds ? (pickups/rounds) : 0;
+
+    keyBox.innerHTML = `
+      <div class="stats-totals">
+        <div class="st-title">Key metrics — ${you.name}</div>
+        <div class="st-row"><span class="st-name">Rounds played</span><span class="st-val">${rounds}</span></div>
+        <div class="st-row"><span class="st-name">Rounds won</span><span class="st-val">${wins}</span></div>
+        <div class="st-row"><span class="st-name">Avg points/round</span><span class="st-val">${mean.toFixed(1)}</span></div>
+        <div class="st-row"><span class="st-name">Best (lowest) round</span><span class="st-val">${best}</span></div>
+        <div class="st-row"><span class="st-name">Worst (highest) round</span><span class="st-val">${worst}</span></div>
+        <div class="st-row"><span class="st-name">Total pickups</span><span class="st-val">${pickups}</span></div>
+        <div class="st-row"><span class="st-name">Pickups / round</span><span class="st-val">${ppu.toFixed(2)}</span></div>
+      </div>
+    `;
+  }
+
+  function drawFor(playerIndex){
+    const series = seriesFor(playerIndex);
+    renderLineChart(chart, series);
+    renderKeyStats(playerIndex);
+  }
+
+  sel.onchange = ()=> drawFor(parseInt(sel.value,10));
+  sel.value = '0';
+  drawFor(0);
+
+  // Totals area for pickups by player (match)
+  renderPickupTotals(totalsBox);
 
   modal.style.display = 'flex';
   document.getElementById('statsClose').onclick = ()=>{ modal.style.display='none'; };
   document.querySelector('#statsModal .backdrop').onclick = ()=>{ modal.style.display='none'; };
 }
-
 
 // Simple SVG line chart: y = points that round
 function renderLineChart(container, values){
