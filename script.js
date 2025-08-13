@@ -431,6 +431,91 @@ function showRevealChoicePicker(rank, fuQty, hQty){ return new Promise(function(
   const cancel=document.createElement('button'); cancel.textContent='Cancel'; cancel.onclick=function(){ pk.style.display='none'; resolve(null); }; pk.append(cancel);
   pk.style.display='flex'; }); }
 
+// --- Clearer log lines + inline pile expander ---
+
+// Builds a row in #log with optional inline snapshot expander
+function addLogRow(text, snapshotCards){
+  const logEl = document.getElementById('log');
+  const row = document.createElement('div');
+  row.style.display = 'flex';
+  row.style.flexDirection = 'column';
+  row.style.gap = '6px';
+
+  const line = document.createElement('div');
+  line.textContent = text;
+  row.appendChild(line);
+
+  if (snapshotCards && snapshotCards.length){
+    const ctl = document.createElement('a');
+    ctl.href = '#';
+    ctl.textContent = '(see full pile)';
+    ctl.style.marginLeft = '6px';
+    ctl.style.opacity = '.9';
+    ctl.style.textDecoration = 'underline';
+    ctl.onclick = (e)=>{
+      e.preventDefault();
+      snapWrap.style.display = snapWrap.style.display === 'none' ? 'block' : 'none';
+    };
+    // append control to the same line (e.g., "Active value: 5 (see full pile)")
+    line.appendChild(document.createTextNode(' '));
+    line.appendChild(ctl);
+
+    const snapWrap = document.createElement('div');
+    snapWrap.className = 'stack';
+    snapWrap.style.display = 'none';
+    snapWrap.style.flexDirection = 'row';
+    snapWrap.style.flexWrap = 'wrap';
+    snapWrap.style.gap = '4px';
+    snapWrap.style.alignItems = 'center';
+
+    snapshotCards.forEach(c=>{
+      const cardEl = makeCardEl(c, true, false);
+
+      // Remove "mini" look but keep them smaller than in-game cards
+      cardEl.classList.remove('mini'); 
+      cardEl.style.width = '40px';       // a bit smaller than main game cards
+      cardEl.style.height = '60px';
+      cardEl.style.fontSize = '18px';    // large enough to be readable
+      cardEl.style.display = 'inline-flex';
+      cardEl.style.alignItems = 'center';
+      cardEl.style.justifyContent = 'center';
+      cardEl.style.flexDirection = 'column';
+      cardEl.style.marginRight = '4px';
+
+      snapWrap.appendChild(cardEl);
+    });
+
+    row.appendChild(snapWrap);
+  }
+
+  logEl.appendChild(row);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Standardized play line: "Alex (AI) plays 3× 5 from hand and face-up"
+function logPlayLine(playerName, rank, count, opts){
+  opts = opts || {};
+  const from = [];
+  if (opts.fromHand)   from.push('hand');
+  if (opts.fromFaceUp) from.push('face-up');
+  if (opts.fromDown)   from.push('face-down');
+  const fromTxt = from.length ? (' from ' + from.join(' and ')) : '';
+  const who = playerName;
+  const plural = (count === 1) ? '1×' : (count + '×');
+  const msg = `${who} plays ${plural} ${rank}${fromTxt}`;
+  addLogRow(msg);
+}
+
+// “Active value” line: always appended right before the next player starts
+function logActiveValueForNextTurn(){
+  const label = (state.currentValue === null)
+    ? 'Fresh start'
+    : RANKS[state.currentValue - 1];
+  // Snapshot the pile now
+  const snap = state.pile.filter(Boolean).slice();
+  addLogRow(`Active value: ${label}`, snap);
+}
+
 // ===== Human interactions (picker) =====
 function promptCountAndPlay(rank, source, max){
   if(!state.roundActive || state.uiLock) return;
@@ -586,25 +671,29 @@ async function playCards(player,rank,source,count,includeFU,includeHand){
 
   // Overplay → forced pickup (same player continues)
   if(!isTen && state.currentValue!==null && rv>state.currentValue){
-    const pileBefore=state.pile.slice();
-    const attempted=Array.from({length:count},()=>({r:rank,s:'♠'}));
-    logAction(player.name+' overplays with '+rank+'×'+count+' (was '+prevLabel+'); picks up.',{snapshotCards:[].concat(pileBefore,attempted)});
-    await maybePauseBefore('pickup',[].concat(pileBefore,attempted),player.name);
+  const pileBefore = state.pile.slice();
+  const attempted  = Array.from({length:count}, ()=>({r:rank,s:'♠'}));
 
-    if(state.pile.length){
-      player.hand.push(...state.pile.filter(Boolean));
-    }
-    if(source==='faceUp'){
-      const moved=removeFaceUpOfRank(player,rank,count);
-      if(moved.length) player.hand.push(...moved);
-    }
-    state.pile = [];
-    state.currentValue=null; state.currentCount=0;
+  // Clean play line + explicit pickup line
+  logPlayLine(player.name, rank, count, {
+    fromHand:   source==='hand',
+    fromFaceUp: source==='faceUp'
+  });
+  addLogRow(player.name + ' picks up pile', [].concat(pileBefore, attempted));
 
-    incPickup(player);                // ← keeps existing pickup accounting
-    render(); await sleep(200);
-    return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true);
+  await maybePauseBefore('pickup', [].concat(pileBefore, attempted), player.name);
+
+  if(state.pile.length){ player.hand.push.apply(player.hand, state.pile.filter(Boolean)); }
+  if(source==='faceUp'){
+    const moved = removeFaceUpOfRank(player, rank, count);
+    if(moved.length) player.hand.push.apply(player.hand, moved);
   }
+  state.pile = [];
+  state.currentValue=null; state.currentCount=0; incPickup(player);
+  render();
+  await sleep(200);
+  return player.isHuman ? enableHumanChoices() : aiTakeTurn(player, true);
+}
 
   // Move selected cards into `played`
   let played=[];
@@ -641,13 +730,17 @@ async function playCards(player,rank,source,count,includeFU,includeHand){
   noteUnload(player.id, played);
   // ----------------------------------------------------
 
-  if(isTen){
-    logAction(player.name+' plays '+rank+' from '+source+'; was '+prevLabel+' → clear.',{snapshotCards:[].concat(state.pile.slice(),played)});
+  if (isTen){
+  logPlayLine(player.name, rank, 1, {
+    fromHand:   source==='hand'   || includeHand,
+    fromFaceUp: source==='faceUp' || includeFU
+  });
+  addLogRow('Pile clears', [].concat(state.pile.slice(), played));
   } else {
-    logAction(
-      player.name+' plays '+rank+'×'+played.length+' from '+source+(includeFU?'+face-up':'')+(includeHand?'+hand':'')+'; was '+prevLabel+'.',
-      {snapshotCards:[].concat(state.pile.slice(),played)}
-    );
+    logPlayLine(player.name, rank, played.length, {
+      fromHand:   (source==='hand')   || includeHand,
+      fromFaceUp: (source==='faceUp') || includeFU
+    });
   }
 
   state.pile.push(...played);
@@ -1067,7 +1160,25 @@ async function clearPile(byPlayer, reason){
   await sleep(200);
 }
 
-function endOrNext(){ render(); const finisher=state.players.find(function(pp){return !hasCards(pp);}); if(finisher){ scoreRound(finisher); return; } state.turn=(state.turn+1)%state.players.length; render(); const cur=state.players[state.turn]; if(!cur.isHuman) aiTakeTurn(cur); }
+function endOrNext(){
+  render();
+
+  const finisher = state.players.find(pp => !hasCards(pp));
+  if (finisher){
+    scoreRound(finisher);
+    return;
+  }
+
+  // Advance turn
+  state.turn = (state.turn + 1) % state.players.length;
+  render();
+
+  // >>> New: before the next player acts, log the board state with inline pile snapshot
+  logActiveValueForNextTurn();
+
+  const cur = state.players[state.turn];
+  if (!cur.isHuman) aiTakeTurn(cur);
+}
 
 // ===== AI =====
 // Choose highest non-special rank; Easy may sometimes pick 2nd-highest.
@@ -2332,10 +2443,15 @@ function startNewRound(){
   const starter = state.players[state.turn];
   log('New game started. Dealer: ' + state.players[state.dealer].name + '. ' + (starter.isHuman ? 'You start.' : (starter.name + ' starts.')));
   render();
+
+  // >>> New: log initial pile state before the starter plays
+  logActiveValueForNextTurn();
+
   const btn = document.getElementById('newRound');
   btn.disabled = true; btn.title = 'Game in progress';
   if (!state.players[state.turn].isHuman) aiTakeTurn(state.players[state.turn]);
 }
+
 function assert(cond,msg){ if(!cond) throw new Error(msg||'Assertion failed'); }
 function clone(r){ return {r:r,s:'♠'}; }
 async function runTests(){ logClear(); log('Running rule tests…'); const sel=parseInt(document.getElementById('playerCount').value,10);
