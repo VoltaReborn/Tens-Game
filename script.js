@@ -3176,9 +3176,22 @@ document.querySelector('#rulesModal .backdrop').addEventListener('click', () => 
 // --- PWA: register service worker ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(err => {
-      console.warn('SW registration failed:', err);
-    });
+    navigator.serviceWorker.register('sw.js').then(registration => {
+      // Check for an updated service worker on each load
+      registration.update();
+
+      // Detect a new SW and refresh once it's installed
+      registration.onupdatefound = () => {
+        const newSW = registration.installing;
+        if (!newSW) return;
+        newSW.onstatechange = () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            // Optional: reload to get the fresh files immediately
+            window.location.reload();
+          }
+        };
+      };
+    }).catch(err => console.warn('SW registration failed:', err));
   });
 }
 
