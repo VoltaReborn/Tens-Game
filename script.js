@@ -1303,6 +1303,56 @@ function canEnableSafeBlindFlip(p){
   if (state.currentValue === null) return false;
   return p.slots.some(s => s && s.down && !s.up); // 10 → fresh start → safe flip
 }
+// --- NEW: helpers to rein in dumb 10s / overplays and prefer big unloads ---
+
+// Is there any legal, non-overplay move (≤ current value) that is NOT a 10?
+function hasAnyLegalNonOverplayMove(p){
+  const fu = faceUpCards(p);
+  const ranks = new Set();
+  p.hand.forEach(c=>{ if(c && c.r) ranks.add(c.r); });
+  fu.forEach(c=> ranks.add(c.r));
+
+  // Fresh pile: any non-10 is a legal non-overplay
+  if (state.currentValue === null){
+    return [...ranks].some(r => r && r !== '10');
+  }
+  // Active pile: anything ≤ current value (and not 10) counts
+  return [...ranks].some(r => r && r !== '10' && RVAL[r] <= state.currentValue);
+}
+
+// Best playable unload (hand+face-up together) ranked by total points (excludes A/2/10)
+function bestPlayableUnloadByPoints(p){
+  const fu = faceUpCards(p);
+  const ranks = new Set();
+  p.hand.forEach(c=>{ if(c && c.r) ranks.add(c.r); });
+  fu.forEach(c=> ranks.add(c.r));
+
+  let best = null;
+  for (const r of ranks){
+    if (!r || r==='10' || r==='A' || r==='2') continue;
+    if (!canPlayRank(r)) continue;
+    const fuQty = countFaceUpRank(p, r);
+    const hQty  = countHandRank(p, r);
+    const total = fuQty + hQty;
+    if (!total) continue;
+    const pts = scoringValue(r) * total;
+    if (!best || pts > best.points) best = {rank:r, fuQty, hQty, total, points:pts};
+  }
+  return best; // or null
+}
+
+// Find a low-value (≤5) face-up that is blocking a facedown card and is currently playable
+function findPlayableLowFUBlockingDown(p){
+  if (state.currentValue === null) return null;
+  for (const s of p.slots){
+    if (s && s.up && s.down){
+      const r = s.up.r;
+      if (scoringValue(r) <= 5 && canPlayRank(r)) return r;
+    }
+  }
+  return null;
+}
+
 async function aiTakeTurn(p, chain){
   if(chain === undefined) chain = false;
 
@@ -1319,37 +1369,35 @@ async function aiTakeTurn(p, chain){
     return endOrNext();
   }
 
-  // decide if a 10 should be used now (shared across Easy/Medium)
-  function shouldUseTenNow(){
-    const pileLen = state.pile.length;
 
-    // never play a 10 on a fresh/empty pile
-    if (!pileLen) return false;
+// decide if a 10 should be used now (Easy/Medium)
+// STRICT: never on an empty pile; only when no non-10 legal exists, or very tight spots.
+function shouldUseTenNow(){
+  const pileLen = state.pile.length;
 
-    const you = p;
-    const opponents = state.players.filter(x => x.id !== you.id);
-    const oppAboutToGoOut = opponents.some(o => (o.hand.filter(Boolean).length + faceUpCards(o).length + faceDownCount(o)) <= 2);
+  // Hard stop: never on an empty pile
+  if (!pileLen) return false;
 
-    // (A) only other legal options are overplays (i.e., nothing legal except 10)
-    const fu = faceUpCards(p);
-    const ranksAvail = new Set();
-    p.hand.forEach(c=>{ if(c&&c.r) ranksAvail.add(c.r); });
-    fu.forEach(c=>ranksAvail.add(c.r));
-    const legalNonSpecial = [...ranksAvail].filter(r => canPlayRank(r) && r!=='A' && r!=='2' && r!=='10');
+  const you = p;
+  const opponents = state.players.filter(x => x.id !== you.id);
+  const oppAboutToGoOut = opponents.some(o => (o.hand.filter(Boolean).length + faceUpCards(o).length + faceDownCount(o)) <= 2);
 
-    if (legalNonSpecial.length === 0 && canPlayRank('10')) return true;
+  // If *any* non-10 legal exists, prefer that over a 10
+  const fu = faceUpCards(p);
+  const ranks = new Set();
+  p.hand.forEach(c=>{ if(c && c.r) ranks.add(c.r); });
+  fu.forEach(c=> ranks.add(c.r));
+  const anyNon10Legal = [...ranks].some(r => r !== '10' && canPlayRank(r));
+  if (anyNon10Legal) return false;
 
-    // (B) opponent about to go out -> unload 10s
-    if (oppAboutToGoOut && canPlayRank('10')) return true;
+  // At this point, 10 is the only legal thing => allow it
+  // (or if the pile is already huge AND nobody else is legal)
+  if (pileLen >= 12) return true;
+  if (oppAboutToGoOut) return true;
 
-    // (C) use a 10 to enable a safe face-up unload or a safe blind flip
-    //    - if you have any face-up card you want to shed soon OR you have facedown copies, a 10 can unlock tempo
-    const hasFaceUpNonSpecial = fu.some(c => c.r !== 'A' && c.r !== '2' && c.r !== '10' && canPlayRank(c.r));
-    const hasAnyFaceDown = p.slots.some(s => s && !s.up && s.down);
-    if ((hasFaceUpNonSpecial || hasAnyFaceDown) && canPlayRank('10')) return true;
+  return true; // only reachable when 10 is the only legal play
+}
 
-    return false;
-  }
 
   try{
     if(!state.roundActive) { endOrNext(); return; }
@@ -1446,82 +1494,83 @@ async function aiTakeTurn(p, chain){
       return endOrNext();
     }
 
-    // ===== “hard/expert” early-pressure branches (smarter value-trade) =====
-if ((diff==='hard'||diff==='expert') && state.currentValue!==null){
-  const counts = pileCounts();
-  const distinct = Object.keys(counts).length;
-  const onlyAces = distinct===1 && counts['A']>0;
-  const single3  = distinct===1 && counts['3']===1;
-  const few2s    = distinct===1 && counts['2']>=1 && counts['2']<=3;
+// ===== “hard/expert” early-pressure branches (tighter) =====
+if((diff==='hard'||diff==='expert') && state.currentValue!==null){
+  // If we can make ANY legal non-overplay move (including A/2), do NOT intentionally overplay.
+  const legalExists = hasAnyLegalNonOverplayMove(p);
+  if (!legalExists){
+    const counts=pileCounts(); const distinct=Object.keys(counts).length;
+    const onlyAces = distinct===1 && counts['A']>0;
+    const single3  = distinct===1 && counts['3']===1;
+    const few2s    = distinct===1 && counts['2']>=1 && counts['2']<=3;
 
-  // helper: best legal unload right now (non-10, respects cap)
-  function bestLegalUnloadPointsNow(player){
-    const ranks = new Set();
-    faceUpCards(player).forEach(c=>ranks.add(c.r));
-    player.hand.forEach(c=>{ if(c&&c.r) ranks.add(c.r); });
-    let best = 0;
-    ranks.forEach(r=>{
-      if (r === '10') return;                // don't compare to 10
-      if (!canPlayRank(r)) return;           // must be legal under cap
-      const copies = countFaceUpRank(player, r) + countHandRank(player, r);
-      const pts = copies * scoringValue(r);
-      if (pts > best) best = pts;
-    });
-    return best;
-  }
+    if(onlyAces){
+      // prefer face-up overplay, else BLIND FLIP, only then hand
+      const higherFU = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r]>1);
+      if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
 
-  if (onlyAces){
-    const higherFU = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > 1);
-    if (higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
+      const idx1 = p.slots.findIndex(s => s && !s.up && s.down);
+      if(idx1>=0) return tryFlipFaceDownSlot(idx1);
 
-    const idx1 = p.slots.findIndex(s => s && !s.up && s.down);
-    if (idx1>=0) return tryFlipFaceDownSlot(idx1);
+      const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r]>1);
+      if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
+    }
 
-    const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > 1);
-    if (higherH.length) return playCards(p, higherH[0], 'hand', 1);
-  }
+    if(single3 || few2s){
+      const cv = state.currentValue;
+      const higherFU2 = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r] > cv);
+      if(higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
 
-  if (single3 || few2s){
-    const higherFU2 = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
-    if (higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
+      const j = p.slots.findIndex(s => s && !s.up && s.down);
+      if(j>=0) return tryFlipFaceDownSlot(j);
 
-    const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
-    if (higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
+      const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > cv);
+      if(higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
+    }
 
-    const j = p.slots.findIndex(s => s && !s.up && s.down);
-    if (j>=0) return tryFlipFaceDownSlot(j);
-  }
+    if(diff==='expert'){
+      const cv = state.currentValue;
+      const pilePts = pilePointsAdjustedForGuaranteedClear(p);
+      const unload  = maxUnloadGroupPoints(p);
+      const distinct3=Object.keys(counts).length;
+      if(distinct3<3 && unload > pilePts){
+        const higherFU3 = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r] > cv);
+        if(higherFU3.length) return playCards(p, higherFU3[0], 'faceUp', 1);
 
-  // Expert-only "thin pile value trade"
-  if (diff==='expert'){
-    const distinct3 = distinct; // reuse
-    if (distinct3 < 3){
-      const pilePts   = pilePointsAdjustedForGuaranteedClear(p);
-      const unloadAny = maxUnloadGroupPoints(p);           // best unload ignoring legality
-      if (unloadAny > pilePts){
-        const legalBest = bestLegalUnloadPointsNow(p);     // best legal unload right now
-        // consider overplay candidates (one card), but ONLY if they unload MORE than legalBest
-        const overFU = [...new Set(fu.map(c=>c.r))].filter(r => RVAL[r] > state.currentValue);
-        const overH  = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > state.currentValue);
-
-        const pickFU = overFU.find(r => scoringValue(r) > legalBest);
-        if (pickFU) return playCards(p, pickFU, 'faceUp', 1);
-
-        const pickH = overH.find(r => scoringValue(r) > legalBest);
-        if (pickH) return playCards(p, pickH, 'hand', 1);
-
-        // otherwise, don't force a value-trade; try a safe flip
         const k = p.slots.findIndex(s => s && !s.up && s.down);
-        if (k>=0) return tryFlipFaceDownSlot(k);
+        if(k>=0) return tryFlipFaceDownSlot(k);
+
+        const higherH3 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > cv);
+        if(higherH3.length) return playCards(p, higherH3[0], 'hand', 1);
       }
     }
   }
 }
 
+
     // ===== General play logic (unchanged for hard/expert) =====
     const fuNow = faceUpCards(p);
     const ranksAvail=new Set(); p.hand.forEach(c=>{ if(c&&c.r) ranksAvail.add(c.r); }); fuNow.forEach(c=>ranksAvail.add(c.r));
     let legal=[...ranksAvail].filter(r=>canPlayRank(r)); const nonAce=legal.filter(r=>r!=='A'); if(nonAce.length) legal=nonAce;
+
+    // --- NEW: if we can unload a big chunk (≥16 pts) using hand+face-up together, do it ---
+    {
+      const best = bestPlayableUnloadByPoints(p);
+      if (best && best.points >= 16){
+        // combine face-up and hand on purpose
+        const from = best.fuQty > 0 ? 'faceUp' : 'hand';
+        return playCards(p, best.rank, from, best.total, best.fuQty > 0, best.hQty > 0);
+      }
+    }
+
+    // --- NEW: if a low-value face-up (≤5) is blocking a facedown and playable, free it now ---
+    {
+      const lowFU = findPlayableLowFUBlockingDown(p);
+      if (lowFU){
+        const cntFU = countFaceUpRank(p, lowFU);
+        if (cntFU > 0) return playCards(p, lowFU, 'faceUp', cntFU, false, false);
+      }
+    }
 
     const oppClose= state.players.some(pl=> pl.id!==p.id && rem(pl) <= 6);
     const early=everyoneEarly();
@@ -1549,60 +1598,38 @@ if ((diff==='hard'||diff==='expert') && state.currentValue!==null){
     }}
 
     const hasTenHand = p.hand.some(c => c && c.r === '10');
-const hasTenFU   = fu.some(c => c.r === '10');
-if (hasTenHand || hasTenFU){
-  let use10 = false;
+    const hasTenFU   = fuNow.some(c => c.r === '10');
+    if (hasTenHand || hasTenFU){
+      const emptyPile = state.pile.length === 0;
+      let use10 = false;
 
-  // helper: best legal unload right now (non-10, respects cap)
-  function bestLegalUnloadPointsNow(player){
-    const ranks = new Set();
-    faceUpCards(player).forEach(c=>ranks.add(c.r));
-    player.hand.forEach(c=>{ if(c&&c.r) ranks.add(c.r); });
-    let best = 0;
-    ranks.forEach(r=>{
-      if (r === '10') return;
-      if (!canPlayRank(r)) return;
-      const copies = countFaceUpRank(player, r) + countHandRank(player, r);
-      const pts = copies * scoringValue(r);
-      if (pts > best) best = pts;
-    });
-    return best;
-  }
+      if (!emptyPile){
+        if (diff === 'easy'){
+          // already clamped by shouldUseTenNow earlier — keep conservative here
+          use10 = false;
+        } else if (diff === 'medium'){
+          use10 = false; // use earlier branch only
+        } else {
+          // HARD/EXPERT: only when pile is large OR an opponent is about to go out AND we gain value
+          const opponentsClose = state.players.some(pl => pl.id!==p.id && rem(pl) <= 2);
+          const unloadPts = maxUnloadGroupPoints(p);
+          const pileLen = state.pile.length;
+          use10 = (pileLen >= 14) || (opponentsClose && unloadPts >= 20);
+        }
+      }
 
-  if (diff === 'easy'){
-    // EASY: Never burn 10 on empty pile unless nothing else plays
-    const emptyPile = state.pile.length === 0;
-    const haveOtherLegal =
-      [...new Set(
-        p.hand.filter(c=>c&&c.r).map(c=>c.r)
-          .concat(fu.map(c=>c.r))
-      )].some(r => r !== '10' && canPlayRank(r));
-    use10 = (!emptyPile && pileLen >= 8) || (!haveOtherLegal);
-  } else if (diff === 'medium'){
-    use10 = oppClose || pileLen >= 10 || early;
-  } else {
-    // HARD/EXPERT baseline
-    const unloadPts = maxUnloadGroupPoints(p);
-    use10 = (!state.currentValue || pileLen >= 12 || early) &&
-            (oppClose ? unloadPts >= 15 : true);
+      // never if any non-10 legal exists
+      if (use10){
+        const ranksAvailNon10 = [...ranksAvail].some(r => r !== '10' && canPlayRank(r));
+        if (ranksAvailNon10) use10 = false;
+      }
 
-    // EXPERT guard: don't waste a 10 on a tiny/low pile (1 × Ace/Two)
-    if (diff === 'expert'){
-      const tinyLowPile = (state.currentValue !== null && state.currentCount === 1 && state.currentValue <= 2);
-      if (tinyLowPile){
-        const legalBest = bestLegalUnloadPointsNow(p);
-        // if ANY legal unload exists, prefer that over burning a 10
-        if (legalBest > 0) use10 = false;
+      if (use10){
+        // prefer from HAND first (keep table flexibility)
+        if (hasTenHand) return playCards(p, '10', 'hand', 1, false, false);
+        if (hasTenFU)   return playCards(p, '10', 'faceUp', 1, false, false);
       }
     }
-  }
-
-  if (use10){
-    if (hasTenHand) return playCards(p, '10', 'hand', 1);
-    else            return playCards(p, '10', 'faceUp', 1);
-  }
-}
-
 
     const legalFU = [...new Set(fu.map(c=>c.r))].filter(r => canPlayRank(r));
     if (legalFU.length){
@@ -1637,11 +1664,15 @@ if (hasTenHand || hasTenFU){
       if(p.hand.some(c=>c&&c.r==='A')) return playCards(p,'A','hand',1);
     }
 
-    if(state.currentValue!==null){
+    if(state.currentValue !== null && !hasAnyLegalNonOverplayMove(p)){
       const higherFU=[...new Set(fuNow.map(c=>c.r))].filter(r=>RVAL[r]>state.currentValue);
-      if(higherFU.length) return playCards(p,higherFU[0],'faceUp',1);
+      if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
+
+      const idxFlip = p.slots.findIndex(s => s && !s.up && s.down);
+      if(idxFlip >= 0) return tryFlipFaceDownSlot(idxFlip);
+
       const higherH=[...new Set(p.hand.map(c=>c&&c.r))].filter(r=>r && RVAL[r]>state.currentValue);
-      if(higherH.length) return playCards(p,higherH[0],'hand',1);
+      if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
     }
 
     const i = p.slots.findIndex(s => s && !s.up && s.down);
