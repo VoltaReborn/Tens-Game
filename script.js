@@ -1779,9 +1779,53 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
       if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
     }
 
-    const i = p.slots.findIndex(s => s && !s.up && s.down);
-    if(i>=0){ return tryFlipFaceDownSlot(i); }
+    // ===== MUST-PLAY GUARANTEE (never skip a legal move) =====
+    {
+      const fuNow = faceUpCards(p);
+      const can = (r)=> canPlayRank(r);
+      const ranks = [...new Set(
+        p.hand.map(c=>c&&c.r).concat(fuNow.map(c=>c.r))
+      )].filter(Boolean);
 
+      // helper: play exactly ONE of rank, prefer from face-up to free a slot
+      const playOne = (rank)=>{
+        const fuQty = countFaceUpRank(p, rank);
+        const hQty  = countHandRank(p, rank);
+        if (fuQty > 0) return playCards(p, rank, 'faceUp', 1, false, false);
+        if (hQty  > 0) return playCards(p, rank, 'hand',   1, false, false);
+        return null;
+      };
+
+      // 1) Any legal non-special (excluding A/2/10): play the highest
+      const legalNonSpecial = ranks
+        .filter(r => r!=='A' && r!=='2' && r!=='10' && can(r))
+        .sort((a,b)=> RVAL[b]-RVAL[a]);
+      if (legalNonSpecial.length){
+        return playOne(legalNonSpecial[0]);
+      }
+
+      // 2) If a 2 is legal, play one (face-up preferred)
+      if (can('2') && (countFaceUpRank(p,'2') || countHandRank(p,'2'))){
+        return playOne('2');
+      }
+
+      // 3) If an Ace is legal, play one (face-up preferred)
+      if (can('A') && (countFaceUpRank(p,'A') || countHandRank(p,'A'))){
+        return playOne('A');
+      }
+
+      // 4) If we have a 10, play one EVEN ON A FRESH PILE if nothing else is legal.
+      //    (Suboptimal clears are better than an illegal “pass”.)
+      if (countFaceUpRank(p,'10') || countHandRank(p,'10')){
+        return playOne('10');
+      }
+    }
+
+    // If we truly have no legal card (e.g., only higher-than-cap non-10s), try a blind flip
+    const i = p.slots.findIndex(s => s && !s.up && s.down);
+    if (i >= 0){ return tryFlipFaceDownSlot(i); }
+
+    // Absolutely nothing to do (should be rare): advance
     endOrNext();
   }catch(err){
     log('AI turn error for ' + p.name + ': ' + (err && err.message ? err.message : String(err)));
