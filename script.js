@@ -1414,16 +1414,16 @@ async function aiTakeTurn(p, chain){
 // decide if a 10 should be used now (Easy/Medium)
 // STRICT: never on an empty pile; only when no non-10 legal exists, or very tight spots.
 function shouldUseTenNow(){
-  const pileLen = state.pile.length;
-
-  // Hard stop: never on an empty pile
-  if (!pileLen) return false;
+  // Hard stop: NEVER on an empty pile
+  if (state.pile.length === 0) return false;
 
   const you = p;
   const opponents = state.players.filter(x => x.id !== you.id);
-  const oppAboutToGoOut = opponents.some(o => (o.hand.filter(Boolean).length + faceUpCards(o).length + faceDownCount(o)) <= 2);
+  const oppAboutToGoOut = opponents.some(o => (
+    o.hand.filter(Boolean).length + faceUpCards(o).length + faceDownCount(o)
+  ) <= 2);
 
-  // If *any* non-10 legal exists, prefer that over a 10
+  // If any non-10 legal exists, do NOT use 10
   const fu = faceUpCards(p);
   const ranks = new Set();
   p.hand.forEach(c=>{ if(c && c.r) ranks.add(c.r); });
@@ -1431,14 +1431,13 @@ function shouldUseTenNow(){
   const anyNon10Legal = [...ranks].some(r => r !== '10' && canPlayRank(r));
   if (anyNon10Legal) return false;
 
-  // At this point, 10 is the only legal thing => allow it
-  // (or if the pile is already huge AND nobody else is legal)
+  // At this point 10 is literally the only legal thing:
+  const pileLen = state.pile.length;
   if (pileLen >= 12) return true;
   if (oppAboutToGoOut) return true;
 
-  return true; // only reachable when 10 is the only legal play
+  return true; // only when 10 is the *only* legal move
 }
-
 
   try{
     if(!state.roundActive) { endOrNext(); return; }
@@ -1512,6 +1511,32 @@ function shouldUseTenNow(){
       }
     }
 
+    // ===== EXPERT: Opening on a fresh pile (combined zones, no 10) =====
+    // If the pile is empty, Expert plays the HIGHEST legal non-special rank across hand+face-up,
+    // dumping all copies. If only specials are available, prefer A or 2 (NEVER 10 on fresh).
+    if (diff === 'expert' && state.currentValue === null) {
+      const ranks = new Set();
+      p.hand.forEach(c => { if (c && c.r) ranks.add(c.r); });
+      fu.forEach(c => ranks.add(c.r));
+
+      // Highest non-special (avoid 10/A/2)
+      const nonSpecials = [...ranks].filter(r => r !== '10' && r !== 'A' && r !== '2');
+      if (nonSpecials.length) {
+        const r = nonSpecials.sort((a,b) => RVAL[b] - RVAL[a])[0];
+        const fuQty = countFaceUpRank(p, r);
+        const hQty  = countHandRank(p, r);
+        return playCards(p, r, fuQty>0 ? 'faceUp' : 'hand', fuQty + hQty, fuQty>0, hQty>0);
+      }
+
+      // Only specials exist: prefer A or 2; never burn a 10 on an empty pile
+      if (countFaceUpRank(p,'A') || countHandRank(p,'A')) {
+        return playCards(p, 'A', countFaceUpRank(p,'A') ? 'faceUp' : 'hand', 1, false, false);
+      }
+      if (countFaceUpRank(p,'2') || countHandRank(p,'2')) {
+        return playCards(p, '2', countFaceUpRank(p,'2') ? 'faceUp' : 'hand', 1, false, false);
+      }
+      // If literally only 10s exist, fall through; later MUST-PLAY guard will handle it.
+    }
 
     // ===== EASY / MEDIUM (reworked) =====
     if (diff === 'easy' || diff === 'medium') {
@@ -1766,21 +1791,27 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
       }
     }
 
-    const legalFU = [...new Set(fu.map(c=>c.r))].filter(r => canPlayRank(r));
-    if (legalFU.length){
-      const r1 = pickBestNonSpecial(legalFU, diff);
-      if (r1){
-        const cnt = fu.filter(c => c.r === r1).length;
-        return playCards(p, r1, 'faceUp', cnt);
-      }
-    }
+    // ===== Unified highest-legal non-special pick (combined hand + face-up) =====
     {
-      const r2 = pickBestNonSpecial(legal, diff);
-      if (r2){
-        const cntH2 = p.hand.filter(c => c && c.r === r2).length;
-        if (cntH2){ return playCards(p, r2, 'hand', cntH2); }
+      const ranksAvail = new Set();
+      p.hand.forEach(c=>{ if(c && c.r) ranksAvail.add(c.r); });
+      fu.forEach(c=> ranksAvail.add(c.r));
+
+      // Filter to legal & non-special
+      const legalCombined = [...ranksAvail].filter(r => r !== 'A' && r !== '2' && r !== '10' && canPlayRank(r));
+
+      if (legalCombined.length) {
+        // Pick the single highest value rank overall
+        const best = legalCombined.sort((a,b)=> RVAL[b] - RVAL[a])[0];
+
+        const fuQty = countFaceUpRank(p, best);
+        const hQty  = countHandRank(p, best);
+
+        // Dump all copies across zones (prefer table as the starting source if present)
+        return playCards(p, best, fuQty>0 ? 'faceUp' : 'hand', fuQty + hQty, fuQty>0, hQty>0);
       }
     }
+
     // EASY: Doesn't hoard specials. If a non-special wasn't played above,
     // try a 2, then an Ace (prefer face-up, play just one).
     if (diff === 'easy'){
