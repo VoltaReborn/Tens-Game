@@ -195,6 +195,24 @@ function makeCardEl(card, small, hidden){
 function groupByRank(cards){ const m={}; for(const c of cards){ if(!c||!c.r) continue; (m[c.r]||(m[c.r]=[])).push(c); } return m; }
 function canPlayRank(rank){ if(rank==='10') return true; if(state.currentValue===null) return true; return RVAL[rank] <= state.currentValue; }
 
+function recomputeActiveFromTail(){
+  const pile = state.pile.filter(Boolean);
+  if (!pile.length){
+    state.currentValue = null;
+    state.currentCount = 0;
+    return;
+  }
+  const lastRank = pile[pile.length - 1].r;
+  let cnt = 0;
+  for (let i = pile.length - 1; i >= 0; i--){
+    const c = pile[i];
+    if (c && c.r === lastRank) cnt++;
+    else break;
+  }
+  state.currentValue = RVAL[lastRank];
+  state.currentCount = cnt;
+}
+
 function render(){
   const aiWrap = document.getElementById('aiTop'), meWrap = document.getElementById('human');
   aiWrap.innerHTML = ''; meWrap.innerHTML = '';
@@ -663,7 +681,6 @@ function showPicker(rank, source, max) {
 }
 
 // ===== Play Logic =====
-// ===== Play Logic =====
 async function playCards(player,rank,source,count,includeFU,includeHand){
   includeFU=!!includeFU; includeHand=!!includeHand;
   const isTen=(rank==='10'); const rv=RVAL[rank];
@@ -671,29 +688,29 @@ async function playCards(player,rank,source,count,includeFU,includeHand){
 
   // Overplay → forced pickup (same player continues)
   if(!isTen && state.currentValue!==null && rv>state.currentValue){
-  const pileBefore = state.pile.slice();
-  const attempted  = Array.from({length:count}, ()=>({r:rank,s:'♠'}));
+    const pileBefore = state.pile.slice();
+    const attempted  = Array.from({length:count}, ()=>({r:rank,s:'♠'}));
 
-  // Clean play line + explicit pickup line
-  logPlayLine(player.name, rank, count, {
-    fromHand:   source==='hand',
-    fromFaceUp: source==='faceUp'
-  });
-  addLogRow(player.name + ' picks up pile', [].concat(pileBefore, attempted));
+    // Clean play line + explicit pickup line
+    logPlayLine(player.name, rank, count, {
+      fromHand:   source==='hand',
+      fromFaceUp: source==='faceUp'
+    });
+    addLogRow(player.name + ' picks up pile', [].concat(pileBefore, attempted));
 
-  await maybePauseBefore('pickup', [].concat(pileBefore, attempted), player.name);
+    await maybePauseBefore('pickup', [].concat(pileBefore, attempted), player.name);
 
-  if(state.pile.length){ player.hand.push.apply(player.hand, state.pile.filter(Boolean)); }
-  if(source==='faceUp'){
-    const moved = removeFaceUpOfRank(player, rank, count);
-    if(moved.length) player.hand.push.apply(player.hand, moved);
+    if(state.pile.length){ player.hand.push.apply(player.hand, state.pile.filter(Boolean)); }
+    if(source==='faceUp'){
+      const moved = removeFaceUpOfRank(player, rank, count);
+      if(moved.length) player.hand.push.apply(player.hand, moved);
+    }
+    state.pile = [];
+    state.currentValue=null; state.currentCount=0; incPickup(player);
+    render();
+    await sleep(200);
+    return player.isHuman ? enableHumanChoices() : aiTakeTurn(player, true);
   }
-  state.pile = [];
-  state.currentValue=null; state.currentCount=0; incPickup(player);
-  render();
-  await sleep(200);
-  return player.isHuman ? enableHumanChoices() : aiTakeTurn(player, true);
-}
 
   // Move selected cards into `played`
   let played=[];
@@ -725,17 +742,16 @@ async function playCards(player,rank,source,count,includeFU,includeHand){
     /* handled elsewhere */
   }
 
-  // ---- NEW: record ranks & unload for this action ----
+  // ---- stats ----
   noteRanksPlayed(player.id, played);
   noteUnload(player.id, played);
-  // ----------------------------------------------------
 
   if (isTen){
-  logPlayLine(player.name, rank, 1, {
-    fromHand:   source==='hand'   || includeHand,
-    fromFaceUp: source==='faceUp' || includeFU
-  });
-  addLogRow('Pile clears', [].concat(state.pile.slice(), played));
+    logPlayLine(player.name, rank, 1, {
+      fromHand:   source==='hand'   || includeHand,
+      fromFaceUp: source==='faceUp' || includeFU
+    });
+    addLogRow('Pile clears', [].concat(state.pile.slice(), played));
   } else {
     logPlayLine(player.name, rank, played.length, {
       fromHand:   (source==='hand')   || includeHand,
@@ -751,22 +767,21 @@ async function playCards(player,rank,source,count,includeFU,includeHand){
     await clearPile(player,'10');                // noteClear() happens inside clearPile
     if(hasCards(player)) { await sleep(180); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true); }
   } else {
-    if(state.currentValue===rv) state.currentCount+=played.length;
-    else { state.currentValue=rv; state.currentCount=played.length; }
+    // >>> NEW: always recalc active from actual pile tail to avoid drift
+    recomputeActiveFromTail();
 
     if(state.currentCount>=4){
       const snap2=state.pile.slice();
       await maybePauseBefore('clear',snap2,player.name);
-      await clearPile(player,rank+' reached '+state.currentCount); // noteClear() happens inside clearPile
+      await clearPile(player, RANKS[state.currentValue-1] + ' reached ' + state.currentCount); // noteClear() inside
       if(hasCards(player)) { await sleep(180); return player.isHuman? enableHumanChoices(): aiTakeTurn(player,true); }
     }
   }
 
-  // ---- NEW: safe turn bump (only when it wasn't a clear or pickup) ----
+  // Safe turn bump (only when it wasn't a clear or pickup)
   if (!(isTen) && !(state.currentCount >= 4)) {
     bumpSafe(player.id, 1);
   }
-  // --------------------------------------------------------------------
 
   maybeDeclare(player);
   logBoardState();
@@ -847,9 +862,7 @@ async function tryFlipFaceDownSlot(slotIdx){
       state.currentCount = 0;
 
       incPickup(p);
-      // ---- NEW: mark blind fail ----
       ensurePStats(p.id).blindFail++;
-      // ------------------------------
 
       render();
       logBoardState();
@@ -863,28 +876,22 @@ async function tryFlipFaceDownSlot(slotIdx){
 
     state.pile.push(c);
 
-    // ---- NEW: record the flipped card as played/unloaded ----
+    // ---- stats for the flipped card ----
     noteRanksPlayed(p.id, [c]);
     noteUnload(p.id, [c]);
-    // ---------------------------------------------------------
 
-    // Blind 10 clears → same player must continue
     if(c.r === '10'){
       const snap = state.pile.slice();
       await maybePauseBefore('clear', snap, p.name);
-      await clearPile(p, '10 (blind)');   // noteClear() bumps safe inside
-      // ---- NEW: blind success ----
+      await clearPile(p, '10 (blind)');
       ensurePStats(p.id).blindSuccess++;
-      // ----------------------------
       if(hasCards(p)){
         await sleep(160);
         return isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
       }
     } else {
-      // Update active value/count
-      if(state.currentValue === null){ state.currentValue = rv; state.currentCount = 1; }
-      else if(rv === state.currentValue){ state.currentCount += 1; }
-      else { state.currentValue = rv; state.currentCount = 1; }
+      // >>> NEW: sync from tail after placing the flipped card
+      recomputeActiveFromTail();
 
       // Human may add same-rank extras, or AI auto-adds
       if (isHuman){
@@ -897,26 +904,20 @@ async function tryFlipFaceDownSlot(slotIdx){
           if (fuQty > 0){
             const extraFU = removeFaceUpOfRank(p, c.r, fuQty);
             state.pile.push(...extraFU);
-            state.currentCount += extraFU.length;
-            // ---- NEW: stats for extras ----
             noteRanksPlayed(p.id, extraFU);
             noteUnload(p.id, extraFU);
           }
           if (hQty > 0){
-            let moved = 0, rest = [];
-            const handAdds = [];
+            let rest = [], handAdds = [];
             for (const x of p.hand){
-              if (x && x.r === c.r){ state.pile.push(x); moved++; handAdds.push(x); }
+              if (x && x.r === c.r){ state.pile.push(x); handAdds.push(x); }
               else rest.push(x);
             }
             p.hand = rest;
-            state.currentCount += moved;
-            // ---- NEW: stats for extras ----
             noteRanksPlayed(p.id, handAdds);
             noteUnload(p.id, handAdds);
           }
         } else if (fuQty > 0 || hQty > 0){
-          // Manual picker
           const choice = await showRevealChoicePicker(c.r, fuQty, hQty);
           if(choice){
             let toAdd = choice.count - 1;
@@ -925,23 +926,18 @@ async function tryFlipFaceDownSlot(slotIdx){
               const takeFU = Math.min(fuQty, toAdd);
               const extraFU = removeFaceUpOfRank(p, c.r, takeFU);
               state.pile.push(...extraFU);
-              state.currentCount += extraFU.length;
-              // ---- NEW: stats for extras ----
               noteRanksPlayed(p.id, extraFU);
               noteUnload(p.id, extraFU);
               toAdd -= extraFU.length;
             }
 
             if(choice.useHand && hQty > 0 && toAdd > 0){
-              let moved = 0, rest = [];
-              const handAdds = [];
+              let moved = 0, rest = [], handAdds = [];
               for(const x of p.hand){
                 if(x && moved < toAdd && x.r === c.r){ state.pile.push(x); moved++; handAdds.push(x); }
                 else rest.push(x);
               }
               p.hand = rest;
-              state.currentCount += moved;
-              // ---- NEW: stats for extras ----
               noteRanksPlayed(p.id, handAdds);
               noteUnload(p.id, handAdds);
             }
@@ -951,8 +947,7 @@ async function tryFlipFaceDownSlot(slotIdx){
         // AI auto-adds all same-rank extras
         const canFU = removeFaceUpOfRank(p, c.r, 99);
         if(canFU.length){
-          state.pile.push(...canFU); state.currentCount += canFU.length;
-          // ---- NEW: stats for extras ----
+          state.pile.push(...canFU);
           noteRanksPlayed(p.id, canFU);
           noteUnload(p.id, canFU);
         }
@@ -960,29 +955,28 @@ async function tryFlipFaceDownSlot(slotIdx){
         for(const x of p.hand){ if(x && x.r === c.r) addH.push(x); else rest.push(x); }
         p.hand = rest;
         if(addH.length){
-          state.pile.push(...addH); state.currentCount += addH.length;
-          // ---- NEW: stats for extras ----
+          state.pile.push(...addH);
           noteRanksPlayed(p.id, addH);
           noteUnload(p.id, addH);
         }
       }
 
+      // >>> NEW: after all extras are added, truth the tail again
+      recomputeActiveFromTail();
+
       // Four-or-more clears → same player must continue
       if(state.currentCount >= 4){
         const snap2 = state.pile.slice();
         await maybePauseBefore('clear', snap2, p.name);
-        await clearPile(p, c.r+' reached '+state.currentCount);  // noteClear() bumps safe inside
-        // ---- NEW: blind success ----
+        await clearPile(p, RANKS[state.currentValue - 1] + ' reached ' + state.currentCount);
         ensurePStats(p.id).blindSuccess++;
-        // ----------------------------
         if(hasCards(p)){
           await sleep(160);
           return isHuman ? enableHumanChoices() : aiTakeTurn(p, true);
         }
       } else {
-        // ---- NEW: safe blind flip that neither cleared nor picked up ----
+        // Safe blind flip that neither cleared nor picked up
         bumpSafe(p.id, 1);
-        // ----------------------------------------------------------------
       }
     }
 
@@ -990,7 +984,7 @@ async function tryFlipFaceDownSlot(slotIdx){
     logBoardState();
     endOrNext();
   } finally {
-    if(isHuman) state.uiLock = false;  // always release the lock for humans
+    if(isHuman) state.uiLock = false;
   }
 }
 
