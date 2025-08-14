@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Tens – Card Game</title>
 
-<link rel="manifest" href="/tens-game/manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a5a3c">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -362,7 +363,9 @@
 
 <script>
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/tens-game/sw.js', { scope: '/tens-game/' });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js'); // was /tens-game/sw.js
+  });
 }
 </script>
 
