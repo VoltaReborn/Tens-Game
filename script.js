@@ -1372,6 +1372,28 @@ function findPlayableLowFUBlockingDown(p){
   return null;
 }
 
+// Prefer using a 10 to clear rather than intentionally overplaying & picking up a messy pile.
+function tryUseTenToAvoidPickup(p){
+  if (state.currentValue === null) return false;          // fresh pile: not this guard
+  const pileLen = state.pile.filter(Boolean).length;
+  if (!pileLen) return false;
+
+  // "Nasty" = multi-rank or just big enough that picking it up sucks.
+  const counts   = pileCounts();
+  const distinct = Object.keys(counts).length;
+  const nasty    = (pileLen >= 3) || (distinct >= 2);
+  if (!nasty) return false;
+
+  const tenFU = countFaceUpRank(p, '10');
+  const tenH  = countHandRank(p, '10');
+  if (!(tenFU || tenH)) return false;
+
+  // Clear now — prefer face-up to free a slot; play exactly one 10.
+  if (tenFU) { playCards(p, '10', 'faceUp', 1, false, false); return true; }
+  if (tenH)  { playCards(p, '10', 'hand',   1, false, false); return true; }
+  return false;
+}
+
 async function aiTakeTurn(p, chain){
   if(chain === undefined) chain = false;
 
@@ -1603,6 +1625,7 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
   // If we can make ANY legal non-overplay move (including A/2), do NOT intentionally overplay.
   const legalExists = hasAnyLegalNonOverplayMove(p);
   if (!legalExists){
+    if (tryUseTenToAvoidPickup(p)) return;
     const counts=pileCounts(); const distinct=Object.keys(counts).length;
     const onlyAces = distinct===1 && counts['A']>0;
     const single3  = distinct===1 && counts['3']===1;
@@ -1769,6 +1792,7 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
     }
 
     if(state.currentValue !== null && !hasAnyLegalNonOverplayMove(p)){
+      if (tryUseTenToAvoidPickup(p)) return;
       const higherFU=[...new Set(fuNow.map(c=>c.r))].filter(r=>RVAL[r]>state.currentValue);
       if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
 
