@@ -489,3 +489,161 @@ button, .card.playable{ touch-action: manipulation }
 /* Card face theme chip selection state */
 .chip-group{ display:flex; gap:8px; align-items:center; }
 .chip.selected{ outline:2px solid var(--accent); }
+
+
+/* ===== Compact Mobile View ===== */
+body.compact-mobile {
+  /* Prevent body scroll while we manage main zones */
+  overflow-x: hidden;
+}
+
+/* Always show the floating mini pile in compact mode, pin it left-center */
+body.compact-mobile #miniPile {
+  display: block !important;
+  position: fixed !important;
+  left: 8px !important;
+  top: 50% !important;
+  transform: translateY(-50%);
+  z-index: 600;
+  width: 92px;
+  max-height: 50vh;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+body.compact-mobile #miniAnchor { display: none !important; }
+
+/* Hide the big center pile area in compact mode; the mini pile replaces it */
+body.compact-mobile #centerPile,
+body.compact-mobile #pileStack,
+body.compact-mobile #pileInfo {
+  visibility: hidden;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* Top ribbon: condensed opponents */
+body.compact-mobile #aiTop {
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px;
+  padding: 6px;
+  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--felt-dark) 60%, transparent);
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+/* Opponent playerArea cards smaller */
+body.compact-mobile #aiTop .playerArea .card {
+  transform: scale(.86);
+  transform-origin: top left;
+}
+
+/* Your area pinned to bottom: full-time visibility of your hand */
+body.compact-mobile #human {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 500;
+  background: color-mix(in srgb, var(--felt) 82%, black);
+  border-top: 1px solid rgba(255,255,255,.14);
+  padding: 6px 8px 10px;
+}
+
+/* Hide bulky labels to save space; you still see badges/titles in headers */
+body.compact-mobile #human h3 { display: none; }
+
+/* Table (your 4 up over 4 down) sits just above the hand, compacted */
+body.compact-mobile #human .slotRow {
+  grid-template-columns: repeat(4, 48px) !important;
+}
+body.compact-mobile #human .slotRow > div {
+  height: 64px !important;
+}
+
+/* Overlapping hand grid: see everything without scrolling */
+.compact-hand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 48px); /* card width */
+  grid-auto-rows: 36px;     /* shorter than card height to overlap rows */
+  gap: 4px 4px;             /* col gap, row gap */
+  padding-bottom: 4px;
+}
+.compact-hand-grid .card {
+  width: 48px !important;
+  height: 72px !important;  /* bigger than the 36px row → overlap */
+  font-size: 16px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,.30);
+}
+
+/* Make the log default to collapsed (hidden inline) in compact mode */
+body.compact-mobile #log {
+  display: none !important;
+}
+
+/* Controls bar: keep it reachable */
+body.compact-mobile .controls {
+  position: sticky;
+  bottom: calc(72px + 16px); /* just above your hand height */
+  z-index: 350;
+}
+
+/* ===== Landscape tweaks ===== */
+@media (orientation: landscape) {
+  body.compact-mobile #aiTop {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  .compact-hand-grid {
+    grid-template-columns: repeat(auto-fill, 56px);
+    grid-auto-rows: 38px;
+  }
+  .compact-hand-grid .card {
+    width: 56px !important;
+    height: 80px !important;
+  }
+}
+
+/* ===== Slide-up Log Panel ===== */
+.log-panel {
+  position: fixed;
+  left: 0; right: 0; bottom: -70vh;
+  height: 70vh;
+  z-index: 1000;
+  background: #0d0f12;
+  color: #fff;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  box-shadow: 0 -10px 30px rgba(0,0,0,.45);
+  transition: bottom .25s ease;
+  display: flex;
+  flex-direction: column;
+}
+.log-panel[aria-hidden="false"] { bottom: 0; }
+
+.log-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.14);
+}
+.lp-title { font-weight: 700; }
+.lp-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.log-panel-body {
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+
+/* Buttons style nudge (optional) */
+#compactToggle, #logToggle {
+  margin-left: 6px;
+}

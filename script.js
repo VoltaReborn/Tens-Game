@@ -12,6 +12,8 @@ const AI_NAMES=[...MALE_NAMES,...FEMALE_NAMES];
 
 // ===== Settings (with persistence) =====
 const settings = {
+  compactMobileView: false,   // new
+  compactLogCollapsed: true,  // new (keep inline log hidden in compact mode)
   pauseBefore:false, warnOn:false, warnThresh:5,
   showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false,
   showHintBtn:true,
@@ -22,7 +24,8 @@ const settings = {
   tableFavorites:[],
   cardBack:'solid-blue',
   cardBackFavorites:[],            
-  cardBackCustomBg:''         
+  cardBackCustomBg:''  
+         
 };
 
 function loadSettings(){
@@ -41,6 +44,9 @@ function loadSettings(){
   // Normalize card face theme and apply
   if (settings.cardFaceTheme !== 'dark') settings.cardFaceTheme = 'classic';
   document.body.dataset.cardface = settings.cardFaceTheme;
+
+  if (typeof settings.compactMobileView !== 'boolean') settings.compactMobileView = false;
+  if (typeof settings.compactLogCollapsed !== 'boolean') settings.compactLogCollapsed = true;
 
   // Apply table/chrome and cardback immediately
   applyTableTheme(settings.tableColor);
@@ -387,6 +393,7 @@ function render(){
 
   updateScores();
   renderMiniPile();
+  wireHandGridForCompact();
 }
 
 // ==== Theme helpers (felt gradient from a single base color) ====
@@ -2659,6 +2666,9 @@ function initMiniObserver(){
   window.addEventListener('touchend', onUp);
 }
 
+applyCompactClass();
+window.addEventListener('resize', applyCompactClass);
+
 function incPickup(p){
   // per-round (existing)
   const m = state.roundStats && state.roundStats.pickups;
@@ -3253,6 +3263,49 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// ===== Compact Mobile Layout =====
+function isMobileScreen(){
+  return window.innerWidth <= 900; // same threshold you already use for mobile checks
+}
+
+function applyCompactClass(){
+  const on = settings.compactMobileView && isMobileScreen();
+  document.body.classList.toggle('compact-mobile', on);
+}
+
+function wireHandGridForCompact(){
+  // Re-run after each render so the hand container gets the grid class.
+  if (!document.body.classList.contains('compact-mobile')) return;
+
+  const meWrap = document.getElementById('human');
+  if (!meWrap) return;
+
+  // Find the hand stack that render() builds (Your Hand section -> following .stack)
+  // We'll select the LAST .stack in #human (your hand), not the table's slotRow.
+  const stacks = meWrap.querySelectorAll('.stack');
+  if (!stacks || !stacks.length) return;
+
+  const handStack = stacks[stacks.length - 1];
+  handStack.classList.add('compact-hand-grid');
+}
+
+// Slide-up Log Panel
+function openLogPanel(){
+  const p = document.getElementById('logPanel');
+  const body = document.getElementById('logPanelBody');
+  const src = document.getElementById('log');
+  if (src && body){
+    body.innerHTML = src.innerHTML; // mirror current log content
+    // auto-scroll to bottom (latest)
+    body.scrollTop = body.scrollHeight;
+  }
+  p.setAttribute('aria-hidden','false');
+}
+function closeLogPanel(){
+  const p = document.getElementById('logPanel');
+  p.setAttribute('aria-hidden','true');
+}
+
 // Events
   document.getElementById('playerCount').addEventListener('change',resetAll);
   document.getElementById('aiDifficulty').addEventListener('change',function(){ const sel=document.getElementById('aiDifficulty').value; try{ localStorage.setItem('tens_ai_diff', sel); }catch(e){} log('AI difficulty set to '+displayDiffLabel()); });
@@ -3269,3 +3322,38 @@ if ('serviceWorker' in navigator) {
   document.getElementById('hintBtn').addEventListener('click',openHint);
   document.querySelector('#hintModal .backdrop').addEventListener('click',function(){ document.getElementById('hintModal').style.display='none'; });
   document.getElementById('hintClose').addEventListener('click',function(){ document.getElementById('hintModal').style.display='none'; });
+
+  // ===== Compact View & Log Panel Toggles =====
+(function(){
+  const compactBtn = document.getElementById('compactToggle');
+  const logBtn     = document.getElementById('logToggle');
+  const logX       = document.getElementById('logPanelClose');
+
+  function paintCompactBtn(){
+    if (!compactBtn) return;
+    compactBtn.textContent = 'Compact View: ' + (settings.compactMobileView ? 'On' : 'Off');
+  }
+
+  if (compactBtn){
+    compactBtn.addEventListener('click', ()=>{
+      settings.compactMobileView = !settings.compactMobileView;
+      saveSettings();
+      applyCompactClass();
+      render(); // so the hand grid gets re-wired
+      paintCompactBtn();
+    });
+    paintCompactBtn();
+  }
+
+  if (logBtn){
+    logBtn.addEventListener('click', ()=>{
+      const panel = document.getElementById('logPanel');
+      const open = panel.getAttribute('aria-hidden') === 'false';
+      if (open) closeLogPanel();
+      else openLogPanel();
+    });
+  }
+  if (logX){
+    logX.addEventListener('click', closeLogPanel);
+  }
+})();
