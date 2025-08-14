@@ -2920,6 +2920,15 @@ document.querySelector('#rulesModal .backdrop').addEventListener('click', () => 
   document.getElementById('rulesModal').style.display = 'none';
 });
 
+// --- PWA: register service worker ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => {
+      console.warn('SW registration failed:', err);
+    });
+  });
+}
+
 // Events
   document.getElementById('playerCount').addEventListener('change',resetAll);
   document.getElementById('aiDifficulty').addEventListener('change',function(){ const sel=document.getElementById('aiDifficulty').value; try{ localStorage.setItem('tens_ai_diff', sel); }catch(e){} log('AI difficulty set to '+displayDiffLabel()); });

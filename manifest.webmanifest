@@ -1,0 +1,13 @@
+{
+  "name": "Tens — Card Game",
+  "short_name": "Tens",
+  "start_url": "/tens-game/index.html",
+  "scope": "/tens-game/",
+  "display": "standalone",
+  "background_color": "#0a5a3c",
+  "theme_color": "#0a5a3c",
+  "icons": [
+    { "src": "/tens-game/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/tens-game/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
