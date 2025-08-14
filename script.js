@@ -1646,6 +1646,33 @@ function shouldUseTenNow(){
     }
 
 // ===== “hard/expert” early-pressure branches (tighter) =====
+// --- NEW: Aggressively pick up a single low pile (e.g., lone 2/A) on Expert/Hard ---
+// If the pile is exactly one low card, prefer to overplay with face-up > blind flip > hand.
+// We avoid burning a 10 here; clears are handled elsewhere.
+if ((diff === 'hard' || diff === 'expert') && state.currentValue !== null && pileSingleLowCard()) {
+  const cv = state.currentValue;
+
+  // 1) Try a face-up overplay (exclude 10; we don't want to waste it here)
+  const overFU = [...new Set(faceUpCards(p).map(c => c.r))]
+    .filter(r => r !== '10' && RVAL[r] > cv);
+  if (overFU.length) {
+    return playCards(p, overFU[0], 'faceUp', 1);
+  }
+
+  // 2) Try a blind flip (preferred over a guaranteed hand overplay/pickup)
+  const flipIdx = p.slots.findIndex(s => s && !s.up && s.down);
+  if (flipIdx >= 0) {
+    return tryFlipFaceDownSlot(flipIdx);
+  }
+
+  // 3) Fall back to a hand overplay (still avoid 10 here)
+  const overH = [...new Set(p.hand.map(c => c && c.r))]
+    .filter(r => r && r !== '10' && RVAL[r] > cv);
+  if (overH.length) {
+    return playCards(p, overH[0], 'hand', 1);
+  }
+  // If the only higher option was a 10, let later logic decide on a 10-clear.
+}
 if((diff==='hard'||diff==='expert') && state.currentValue!==null){
   // If we can make ANY legal non-overplay move (including A/2), do NOT intentionally overplay.
   const legalExists = hasAnyLegalNonOverplayMove(p);
