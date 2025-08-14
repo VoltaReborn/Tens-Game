@@ -1550,6 +1550,27 @@ function shouldUseTenNow(){
         if (r) return playCards(p, r, (r==='A' && hA>0) || (r==='2' && h2>0) ? 'hand' : 'faceUp', 1, false, false);
       }
 
+      // --- MUST-PLAY fallback: if only specials (2/A/10) are legal, play one of them ---
+      // We reach here only if no earlier rule fired. The player MUST play at least one card.
+      {
+        const specials = ['2','A','10'];
+
+        // Is any special both in our hand/table and legal under the current cap?
+        const firstLegalSpecial = specials.find(r =>
+          canPlayRank(r) && (countHandRank(p, r) + countFaceUpRank(p, r) > 0)
+        );
+
+        if (firstLegalSpecial) {
+          // Prefer spending a face-up copy if available, otherwise from hand.
+          if (countFaceUpRank(p, firstLegalSpecial) > 0) {
+            return playCards(p, firstLegalSpecial, 'faceUp', 1, false, false);
+          }
+          if (countHandRank(p, firstLegalSpecial) > 0) {
+            return playCards(p, firstLegalSpecial, 'hand', 1, false, false);
+          }
+        }
+      }
+
       // 5) No legal play → flip a face-down
       const i = p.slots.findIndex(s => s && !s.up && s.down);
       if(i>=0){ return tryFlipFaceDownSlot(i); }
