@@ -3,14 +3,13 @@ const ROOT  = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const CACHE = 'tens-v1';
 
 const ASSETS = [
-  `${ROOT}/`,
-  `${ROOT}/index.html`,
-  `${ROOT}/styles.css`,
-  `${ROOT}/script.js`,
-  `${ROOT}/icons/icon-180.png`,
-  `${ROOT}/icons/icon-192.png`,
-  `${ROOT}/icons/icon-512.png`,
-  `${ROOT}/manifest.webmanifest`,
+  './',
+  'index.html',
+  'styles.css',
+  'script.js',
+  'manifest.webmanifest',
+  'icons/icon-192.png',
+  'icons/icon-512.png'
 ];
 
 self.addEventListener('install', (e) => {
