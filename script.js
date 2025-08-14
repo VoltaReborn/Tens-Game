@@ -1299,6 +1299,31 @@ function canEnableSafeBlindFlip(p){
 }
 // --- NEW: helpers to rein in dumb 10s / overplays and prefer big unloads ---
 
+// True if there exists a legal (≤ current cap or fresh) move that is NOT A/2/10
+function hasLegalNonSpecialExcludingA2(p){
+  const fu = faceUpCards(p);
+  const ranks = new Set();
+  p.hand.forEach(c=>{ if(c&&c.r) ranks.add(c.r); });
+  fu.forEach(c=> ranks.add(c.r));
+
+  if (state.currentValue === null){
+    return [...ranks].some(r => r && r!=='10' && r!=='A' && r!=='2');
+  }
+  const cap = state.currentValue;
+  return [...ranks].some(r => r && r!=='10' && r!=='A' && r!=='2' && RVAL[r] <= cap);
+}
+
+// Would playing rank r reach a guaranteed 4-of-a-kind clear now?
+function canClearNowByRank(p, r){
+  if (!canPlayRank(r)) return false;
+  const fuQty = countFaceUpRank(p, r);
+  const hQty  = countHandRank(p, r);
+  const have  = fuQty + hQty;
+  if (state.currentValue === null) return have >= 4;
+  const sameOnPile = (RANKS[state.currentValue-1] === r) ? state.currentCount : 0;
+  return (have + sameOnPile) >= 4;
+}
+
 // Is there any legal, non-overplay move (≤ current value) that is NOT a 10?
 function hasAnyLegalNonOverplayMove(p){
   const fu = faceUpCards(p);
@@ -2251,36 +2276,42 @@ function computeExpertMove(p){
     }
   }
 
-  // ===== Strategic A/2: keep in hand; play face-up earlier when safe =====
+  // ===== Strategic A/2: conserve unless cap is low, no better move exists, or it's a guaranteed clear =====
   if (canPlayRank('A') || canPlayRank('2')){
-    const cv = state.currentValue;
-    const thresholdOk = (cv === null) || (RVAL[RANKS[cv-1]] <= 6);
-    const earlyOK = earlyGameForA2();
+    const cv   = state.currentValue;           // null means fresh
+    const cap  = (cv === null) ? null : cv;    // numeric cap if any
+    const lowCapOK = (cap !== null && cap <= RVAL['6']); // only “dump A/2” when pile cap ≤ 6
+    const noBetter = !hasLegalNonSpecialExcludingA2(p);  // nothing non-special legal
+    const canClearA = canClearNowByRank(p, 'A');
+    const canClear2 = canClearNowByRank(p, '2');
 
     const fu = faceUpCards(p);
-
-    // If we have multiple face-up A's, play all face-up copies (not hand)
     const fuA = fu.filter(c=>c.r==='A').length;
-    if (fuA >= 2 && canPlayRank('A')){
-      return playCards(p,'A','faceUp',fuA);
-    }
-
-    // Multiple face-up 2's, same deal
     const fu2 = fu.filter(c=>c.r==='2').length;
-    if (fu2 >= 2 && canPlayRank('2')){
-      return playCards(p,'2','faceUp',fu2);
+
+    // Allow spending A/2 ONLY if:
+    //  (1) it guarantees a 4-of-a-kind clear right now, OR
+    //  (2) cap is low (≤6) AND there is no legal non-special alternative, OR
+    //  (3) there is literally no other legal move at all (handled later anyway).
+    if (canClearA){
+      if (fuA > 0) return playCards(p,'A','faceUp',Math.min(fuA, 4)); // spend table copies first
+      if (countHandRank(p,'A') > 0) return playCards(p,'A','hand', Math.min(countHandRank(p,'A'), 4));
+    }
+    if (canClear2){
+      if (fu2 > 0) return playCards(p,'2','faceUp',Math.min(fu2, 4));
+      if (countHandRank(p,'2') > 0) return playCards(p,'2','hand', Math.min(countHandRank(p,'2'), 4));
     }
 
-    // Single face-up A/2 when early & active value is low (≤6): allow
-    if ((earlyOK && thresholdOk)){
-      if (fuA >= 1 && canPlayRank('A')) return playCards(p,'A','faceUp',1);
-      if (fu2 >= 1 && canPlayRank('2')) return playCards(p,'2','faceUp',1);
+    if (lowCapOK && noBetter){
+      // Spend exactly ONE from face-up if available, otherwise one from hand
+      if (fuA > 0) return playCards(p,'A','faceUp',1,false,false);
+      if (fu2 > 0) return playCards(p,'2','faceUp',1,false,false);
+      if (countHandRank(p,'A') > 0) return playCards(p,'A','hand',1,false,false);
+      if (countHandRank(p,'2') > 0) return playCards(p,'2','hand',1,false,false);
     }
 
-    // Otherwise: DO NOT spend A/2 from hand unless it’s literally the last legal option
-    // (handled implicitly because we won’t choose them below unless nothing else is playable)
+    // Otherwise: do NOT burn A/2; keep them as safety. We fall through to other choices.
   }
-
 
   // ===== Prefer strongest playable from table (non-ace), dump all of that rank =====
   const playableFU = ranksFrom(fu).filter(r => playable(r) && r!=='A')
