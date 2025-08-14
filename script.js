@@ -1690,12 +1690,20 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
       }
     }
 
-    // --- NEW: if a low-value face-up (≤5) is blocking a facedown and playable, free it now ---
+    // --- SMARTER: only free a low face-up (≤5) when cap is LOW and no meaningful unload exists ---
     {
       const lowFU = findPlayableLowFUBlockingDown(p);
       if (lowFU){
-        const cntFU = countFaceUpRank(p, lowFU);
-        if (cntFU > 0) return playCards(p, lowFU, 'faceUp', cntFU, false, false);
+        const cap = state.currentValue;                      // 1..13 or null
+        const capIsLow = (cap !== null) && (cap <= RVAL['7']); // tweak threshold if you want
+        const best = bestPlayableUnloadByPoints(p);          // excludes A/2/10
+        const hasMeaningfulUnload = !!best && best.points >= 12; // ~two 6s or better
+
+        if (capIsLow && !hasMeaningfulUnload){
+          const cntFU = countFaceUpRank(p, lowFU);
+          if (cntFU > 0) return playCards(p, lowFU, 'faceUp', cntFU, false, false);
+        }
+        // Otherwise, skip freeing the low card now; let higher-value unload logic run.
       }
     }
 
