@@ -1408,6 +1408,70 @@ function shouldUseTenNow(){
     const diff = getAIDifficulty();
     const pileLen = state.pile.length;
 
+    // ===== Finisher: if we can clear then immediately go out, do it (override everything) =====
+    {
+      // Only guarantee-based finishes (no blind flips)
+      const downLeft = faceDownCount(p);
+      if (downLeft === 0) {
+        const fu = faceUpCards(p);
+
+        // Helper: count across hand + face-up
+        const totalOf = (r) => countHandRank(p, r) + countFaceUpRank(p, r);
+
+        // All visible ranks in hand+table
+        const ranksVisible = new Set(
+          p.hand.filter(Boolean).map(c => c.r).concat(fu.map(c => c.r))
+        );
+
+        // --- Case A: We have a 10 AND, aside from that single 10, all remaining cards are one rank. ---
+        // Example: just [10, 2] in hand on an empty pile → play 10 (clear/continue), then 2 to go out.
+        const totalTens = totalOf('10');
+        if (totalTens >= 1) {
+          // Build the set of ranks ignoring ONE ten (the ten we'll use to clear)
+          const nonTenCounts = {};
+          ranksVisible.forEach(r => {
+            if (r === '10') return;
+            nonTenCounts[r] = totalOf(r);
+          });
+          const nonZeroRanks = Object.keys(nonTenCounts).filter(r => nonTenCounts[r] > 0);
+
+          // If there's exactly one non-10 rank left (could be '2', 'A', or anything)
+          if (nonZeroRanks.length === 1) {
+            const lastRank = nonZeroRanks[0];
+            // This finish is guaranteed because after a 10, the pile is fresh and any rank is legal.
+            // Allow 10 even on an empty pile *for this finisher only*.
+            const haveTenH  = countHandRank(p,'10') > 0;
+            const haveTenFU = countFaceUpRank(p,'10') > 0;
+
+            if (haveTenH)  return playCards(p, '10', 'hand',  1, false, false);
+            if (haveTenFU) return playCards(p, '10', 'faceUp',1, false, false);
+          }
+        }
+        
+        if (state.currentValue !== null) {
+          const activeRank = RANKS[state.currentValue - 1];
+          const need = Math.max(0, 4 - state.currentCount);
+          const haveActive = totalOf(activeRank);
+          if (need > 0 && haveActive >= need) {
+            // Simulate spending 'need' copies of activeRank, then check what's left
+            const remaining = {};
+            ranksVisible.forEach(r => remaining[r] = totalOf(r));
+            remaining[activeRank] = Math.max(0, remaining[activeRank] - need);
+
+            const leftoverRanks = Object.keys(remaining).filter(r => remaining[r] > 0);
+            // If after clearing we'd have only one rank left, we can dump it on the fresh pile
+            if (leftoverRanks.length === 1) {
+              // Prefer using face-up copies of the active rank first
+              const fromFU = Math.min(countFaceUpRank(p, activeRank), need);
+              if (fromFU > 0) return playCards(p, activeRank, 'faceUp', fromFU, false, false);
+              return playCards(p, activeRank, 'hand', need, false, false);
+            }
+          }
+        }
+      }
+    }
+
+
     // ===== EASY / MEDIUM (reworked) =====
     if (diff === 'easy' || diff === 'medium') {
       // 1) Build playable sets
@@ -2163,8 +2227,8 @@ function computeExpertMove(p){
   const hasTenFU = cntFU('10') > 0;
   if(hasTenH || hasTenFU){
     const unload = maxUnloadGroupPoints(p);
-    const shouldTen = (!state.currentValue || pileLen >= 12 || everyoneEarlyFlag) &&
-                      (oppClose ? unload >= 15 : true);
+    const shouldTen = (pileLen >= 12 || everyoneEarlyFlag) &&
+                  (oppClose ? unload >= 15 : true);
     if(shouldTen){
       return {type:'play', source: hasTenH ? 'hand' : 'faceUp', rank:'10', count:1,
         reason: (!state.currentValue ? 'Fresh start—bank a safe clear.' :
@@ -2238,6 +2302,42 @@ function computeExpertMove(p){
     if(hiH.length) return {type:'play', source:'hand', rank:hiH[0], count:1,
       reason:'Raise above current value from hand to change tempo.'};
   }
+
+  // ===== Mandatory special fallback (must play at least one card) =====
+// If *any* legal play exists (even if it's only A/2/10), play one now.
+// Priority: 2 (table > hand) → A (table > hand) → 10 (only if pile not empty; hand > table).
+{
+  const have2FU = countFaceUpRank(p,'2') > 0;
+  const have2H  = countHandRank(p,'2') > 0;
+  const can2    = (have2FU || have2H) && canPlayRank('2');
+
+  const haveAFU = countFaceUpRank(p,'A') > 0;
+  const haveAH  = countHandRank(p,'A') > 0;
+  const canA    = (haveAFU || haveAH) && canPlayRank('A');
+
+  const have10FU = countFaceUpRank(p,'10') > 0;
+  const have10H  = countHandRank(p,'10') > 0;
+  const can10    = (have10FU || have10H) && canPlayRank('10');
+  const pileNotEmpty = state.pile.length > 0;
+
+  // If there is ANY legal play at all, do NOT pass the turn.
+  const anyLegal = can2 || canA || (can10 && pileNotEmpty);
+  if (anyLegal){
+    if (can2){
+      if (have2FU) return playCards(p,'2','faceUp',1,false,false);
+      if (have2H)  return playCards(p,'2','hand',  1,false,false);
+    }
+    if (canA){
+      if (haveAFU) return playCards(p,'A','faceUp',1,false,false);
+      if (haveAH)  return playCards(p,'A','hand',  1,false,false);
+    }
+    if (can10 && pileNotEmpty){
+      // Prefer from HAND to keep table flexible
+      if (have10H)  return playCards(p,'10','hand',  1,false,false);
+      if (have10FU) return playCards(p,'10','faceUp',1,false,false);
+    }
+  }
+}
 
   // ===== Last resort: flip a face-down =====
   const i = p.slots.findIndex(s => s && !s.up && s.down);
