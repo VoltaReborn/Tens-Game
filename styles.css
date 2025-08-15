@@ -491,164 +491,7 @@ button, .card.playable{ touch-action: manipulation }
 .chip.selected{ outline:2px solid var(--accent); }
 
 
-/* ===== Compact Mobile View ===== */
-body.compact-mobile {
-  /* Prevent body scroll while we manage main zones */
-  overflow-x: hidden;
-}
-
-/* Always show the floating mini pile in compact mode, pin it left-center */
-body.compact-mobile #miniPile {
-  display: block !important;
-  position: fixed !important;
-  left: 8px !important;
-  top: 50% !important;
-  transform: translateY(-50%);
-  z-index: 600;
-  width: 92px;
-  max-height: 50vh;
-  border-radius: 10px;
-  box-shadow: 0 6px 24px rgba(0,0,0,.35);
-}
-body.compact-mobile #miniAnchor { display: none !important; }
-
-/* Hide the big center pile area in compact mode; the mini pile replaces it */
-body.compact-mobile #centerPile,
-body.compact-mobile #pileStack,
-body.compact-mobile #pileInfo {
-  visibility: hidden;
-  height: 0;
-  margin: 0;
-  padding: 0;
-}
-
-/* Top ribbon: condensed opponents */
-body.compact-mobile #aiTop {
-  position: sticky;
-  top: 0;
-  z-index: 300;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 6px;
-  padding: 6px;
-  backdrop-filter: blur(6px);
-  background: color-mix(in srgb, var(--felt-dark) 60%, transparent);
-  border-bottom: 1px solid rgba(255,255,255,.12);
-}
-
-/* Opponent playerArea cards smaller */
-body.compact-mobile #aiTop .playerArea .card {
-  transform: scale(.86);
-  transform-origin: top left;
-}
-
-/* Your area pinned to bottom: full-time visibility of your hand */
-body.compact-mobile #human {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  z-index: 500;
-  background: color-mix(in srgb, var(--felt) 82%, black);
-  border-top: 1px solid rgba(255,255,255,.14);
-  padding: 6px 8px 10px;
-}
-
-/* Hide bulky labels to save space; you still see badges/titles in headers */
-body.compact-mobile #human h3 { display: none; }
-
-/* Table (your 4 up over 4 down) sits just above the hand, compacted */
-body.compact-mobile #human .slotRow {
-  grid-template-columns: repeat(4, 48px) !important;
-}
-body.compact-mobile #human .slotRow > div {
-  height: 64px !important;
-}
-
-/* Overlapping hand grid: see everything without scrolling */
-.compact-hand-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 48px); /* card width */
-  grid-auto-rows: 36px;     /* shorter than card height to overlap rows */
-  gap: 4px 4px;             /* col gap, row gap */
-  padding-bottom: 4px;
-}
-.compact-hand-grid .card {
-  width: 48px !important;
-  height: 72px !important;  /* bigger than the 36px row → overlap */
-  font-size: 16px !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,.30);
-}
-
-/* Make the log default to collapsed (hidden inline) in compact mode */
-body.compact-mobile #log {
-  display: none !important;
-}
-
-/* Controls bar: keep it reachable */
-body.compact-mobile .controls {
-  position: sticky;
-  bottom: calc(72px + 16px); /* just above your hand height */
-  z-index: 350;
-}
-
-/* ===== Landscape tweaks ===== */
-@media (orientation: landscape) {
-  body.compact-mobile #aiTop {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  }
-  .compact-hand-grid {
-    grid-template-columns: repeat(auto-fill, 56px);
-    grid-auto-rows: 38px;
-  }
-  .compact-hand-grid .card {
-    width: 56px !important;
-    height: 80px !important;
-  }
-}
-
-/* ===== Slide-up Log Panel ===== */
-.log-panel {
-  position: fixed;
-  left: 0; right: 0; bottom: -70vh;
-  height: 70vh;
-  z-index: 1000;
-  background: #0d0f12;
-  color: #fff;
-  border-top-left-radius: 14px;
-  border-top-right-radius: 14px;
-  box-shadow: 0 -10px 30px rgba(0,0,0,.45);
-  transition: bottom .25s ease;
-  display: flex;
-  flex-direction: column;
-}
-.log-panel[aria-hidden="false"] { bottom: 0; }
-
-.log-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(255,255,255,.14);
-}
-.lp-title { font-weight: 700; }
-.lp-close {
-  background: transparent;
-  border: none;
-  color: inherit;
-  font-size: 18px;
-  cursor: pointer;
-}
-
-.log-panel-body {
-  padding: 10px 12px;
-  overflow-y: auto;
-}
-
-/* Buttons style nudge (optional) */
-#compactToggle, #logToggle {
-  margin-left: 6px;
-}
-
-/* ===== Compact Mobile View (beta) ===== */
+/* ===== Compact UI (single path) ===== */
 :root {
   --compact-pad: max(8px, env(safe-area-inset-left));
   --compact-pad-right: max(8px, env(safe-area-inset-right));
@@ -657,7 +500,7 @@ body.compact-mobile .controls {
 }
 
 body[data-compact="true"] {
-  overflow: hidden; /* zero-scroll app feel */
+  overflow: hidden; /* app feel */
 }
 
 /* Hide legacy layout when compact on */
@@ -671,37 +514,33 @@ body[data-compact="true"] .controls {
   display: none !important;
 }
 
-/* Compact root */
+/* Compact root grid */
 #compactUI {
   position: fixed;
   inset: 0;
   padding: var(--compact-pad-top) var(--compact-pad-right) var(--compact-pad-bottom) var(--compact-pad);
   display: none;
-  background: var(--felt); /* reuse table felt */
+  background: var(--felt);
 }
 
-/* Visible when on */
 body[data-compact="true"] #compactUI { display: grid; }
 
-/* Portrait grid: Left opponents column, center pile+your table, right rail, hand bottom */
 @media (orientation: portrait) {
   #compactUI {
     grid-template-areas:
       "opp  pile  rail"
       "opp  hand  rail";
-    grid-template-columns: minmax(68px, 84px) 1fr 52px;
+    grid-template-columns: minmax(68px, 84px) 1fr 0; /* rail overlays, so column width 0 */
     grid-template-rows: 1fr auto;
     gap: 8px;
   }
 }
-
-/* Landscape grid: Opponents left, pile center, rail right, hand bottom spans center */
 @media (orientation: landscape) {
   #compactUI {
     grid-template-areas:
       "opp  pile  rail"
       "opp  hand  rail";
-    grid-template-columns: minmax(92px, 120px) 1fr 64px;
+    grid-template-columns: minmax(92px, 120px) 1fr 0; /* rail overlays */
     grid-template-rows: 1fr auto;
     gap: 10px;
   }
@@ -710,59 +549,56 @@ body[data-compact="true"] #compactUI { display: grid; }
 .comp-opp   { grid-area: opp;   display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
 .comp-pile  { grid-area: pile;  display: grid; grid-template-rows: auto 1fr auto; gap: 6px; border-radius: 12px; padding: 8px; background: color-mix(in oklab, var(--felt) 86%, black); box-shadow: inset 0 0 0 1px var(--chrome-border); }
 .comp-hand  { grid-area: hand;  display: grid; grid-auto-rows: min-content; gap: 6px; }
-.comp-rail  { grid-area: rail;  display: flex; flex-direction: column; align-items: center; gap: 8px; }
 
-.comp-rail .rail-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: 14px;
-  background: color-mix(in oklab, var(--felt-dark) 70%, black);
-  box-shadow: inset 0 0 0 1px var(--chrome-border);
-  display: flex; flex-direction: column; align-items: center; padding: 8px 4px;
+/* ===== Opponents column: top-half only, scrollable area with max 3 visible chips ===== */
+.comp-opp { position: relative; }
+.comp-opp::after {
+  content: "";
+  position: absolute; bottom: 0; left: 0; right: 0; height: 8px;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,.25));
+  pointer-events: none;
+}
+.comp-opp {
+  max-height: 50vh; /* top half */
+  overflow-y: auto;
+}
+.opp-chip {
+  border-radius: 10px; padding: 6px; background: rgba(0,0,0,.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
+}
+.opp-head { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.opp-name { font-size: 12px; font-weight: 700; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+
+/* Badges: fixed width so 2-digits don’t stretch rows */
+.opp-badges { display:flex; gap:6px; }
+.badge-sm {
+  font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
+  min-width: 24px; text-align: center; line-height: 16px; flex: 0 0 auto;
 }
 
-.comp-rail .rail-btn {
-  width: 36px; height: 36px; border-radius: 12px; display: inline-flex;
-  align-items: center; justify-content: center; cursor: pointer;
-  background: rgba(255,255,255,.06);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
-  user-select: none;
+/* Tiny table preview */
+.opp-table { display:flex; gap: 2px; margin-top: 4px; }
+.opp-table .card.small { width: 20px; height: 30px; font-size: 11px; }
+
+/* Turn glow */
+.opp-chip.turn, .comp-mytable.turn {
+  outline: 2px solid rgba(255,255,255,.55);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.18);
 }
 
-.comp-rail .rail-toggle {
-  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px;
-  border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(255,255,255,.08); cursor: pointer; font-weight: 700;
-}
-
-/* Collapsed rail */
-body[data-rail-collapsed="true"] .comp-rail .rail-wrap { width: 28px; }
-body[data-rail-collapsed="true"] .comp-rail .rail-btn { display: none; }
-body[data-rail-collapsed="true"] .comp-rail .rail-toggle { transform: rotate(180deg); }
-
-/* Pile header/label */
+/* ===== Pile area ===== */
 .comp-pile .pile-head { display:flex; align-items:center; justify-content:space-between; }
 .comp-pile .pile-label { font-weight: 700; opacity: .95; }
-.comp-pile .pile-grid  { display: grid; gap: 4px; align-content: start; }
+.comp-pile .pile-grid  { display: grid; gap: 4px; align-content: start; grid-auto-rows: min-content; }
 .comp-pile .pile-footer{ display:flex; justify-content:flex-end; gap:8px; }
 
-/* Pile micro-cards */
-.comp-micro {
-  width: 28px; height: 42px; font-size: 14px;
-  display:flex; align-items:center; justify-content:center;
-}
-@media (orientation: landscape) {
-  .comp-micro { width: 32px; height: 48px; font-size: 16px; }
-}
+/* Micro/hero cards */
+.comp-micro { width: 28px; height: 42px; font-size: 14px; display:flex; align-items:center; justify-content:center; }
+@media (orientation: landscape) { .comp-micro { width: 32px; height: 48px; font-size: 16px; } }
+.comp-hero  { width: 40px; height: 60px; font-size: 20px; display:flex; align-items:center; justify-content:center; }
 
-/* Active value “hero” card */
-.comp-hero {
-  width: 40px; height: 60px; font-size: 20px;
-  display:flex; align-items:center; justify-content:center;
-}
-
-/* Your table strip (4 up over 4 down, down fully covered by up) */
+/* Your table strip placed UNDER pile (order fixed in JS markup) */
 .comp-mytable {
   display: grid; grid-template-columns: repeat(4, minmax(44px, 1fr)); gap: 6px;
   padding: 6px; border-radius: 10px;
@@ -772,55 +608,70 @@ body[data-rail-collapsed="true"] .comp-rail .rail-toggle { transform: rotate(180
 .comp-mytable .slot { position: relative; height: 64px; }
 .comp-mytable .slot .card { position: absolute; inset: 0; }
 
-/* Hand rows: exactly 2 rows preferred; can expand to 3/4 with overlap & shrink */
+/* ===== Hand rows ===== */
 .comp-hand-rows { display: grid; gap: 4px; }
 .comp-hand-row  { display: flex; justify-content: center; gap: 4px; }
-
-/* Allow optional overlap if needed */
 .comp-overlap .comp-hand-row { gap: 0; }
 .comp-overlap .comp-hand-row .card { margin-left: -22px; }
 .comp-overlap .comp-hand-row .card:first-child { margin-left: 0; }
 
-/* Opponents column: tiny rows with name, counts, tiny table preview */
-.opp-chip {
-  border-radius: 10px; padding: 6px; background: rgba(0,0,0,.12);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
-}
-.opp-head { display:flex; align-items:center; justify-content:space-between; gap:6px; }
-.opp-name { font-size: 12px; font-weight: 700; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
-.opp-badges { display:flex; gap:6px; }
-.badge-sm {
-  font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,.08);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
-}
-.opp-table { display:flex; gap: 2px; margin-top: 4px; }
-.opp-table .card.small { width: 20px; height: 30px; font-size: 11px; }
+/* ===== Slide-up Log Panel stays (unchanged) ===== */
 
-/* Turn glow ring */
-.opp-chip.turn, .comp-mytable.turn {
-  outline: 2px solid rgba(255,255,255,.55);
-  box-shadow: 0 0 0 3px rgba(255,255,255,.18);
+/* ===== Right Rail: overlay + two toggles (show/hide & expand labels) ===== */
+.comp-rail { grid-area: rail; }
+.comp-rail .rail-wrap {
+  position: fixed; top: var(--compact-pad-top); bottom: var(--compact-pad-bottom);
+  right: 0;
+  width: 56px; /* collapsed width */
+  border-top-left-radius: 14px; border-bottom-left-radius: 14px;
+  background: color-mix(in oklab, var(--felt-dark) 70%, black);
+  box-shadow: 0 0 0 1px var(--chrome-border), -10px 0 30px rgba(0,0,0,.35);
+  display: flex; flex-direction: column; align-items: stretch; padding: 8px 6px; gap: 8px;
+  transform: translateX(100%);
+  transition: transform .25s ease, width .2s ease;
+  z-index: 800;
 }
 
-/* Log overlay (summon on demand) */
-#compactLog {
-  position: fixed; inset: 0; background: rgba(0,0,0,.66);
-  display: none; align-items: center; justify-content: center;
-  padding: 12px;
+/* Rail open/close */
+body[data-rail-open="true"] .comp-rail .rail-wrap { transform: translateX(0); }
+
+/* Expand: show labels and widen */
+body[data-rail-expanded="true"] .comp-rail .rail-wrap { width: 220px; }
+
+/* Rail buttons */
+.rail-btn {
+  display: grid; grid-template-columns: 36px 1fr; align-items: center;
+  gap: 8px; padding: 6px; border-radius: 10px; cursor: pointer; user-select: none;
+  background: rgba(255,255,255,.06);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
 }
-#compactLog .panel {
-  width: min(720px, 92vw); height: min(70vh, 520px);
-  background: color-mix(in oklab, var(--felt) 88%, black);
-  border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
-  display: grid; grid-template-rows: auto 1fr auto;
+.rail-btn .icon { width: 36px; height: 36px; border-radius: 12px; display:flex; align-items:center; justify-content:center; }
+.rail-btn .label { display: none; font-weight: 600; opacity: .95; }
+body[data-rail-expanded="true"] .rail-btn .label { display: block; }
+
+/* Show/Hide toggle button (little arrow tab) */
+.rail-show {
+  position: fixed; top: 50%; right: 0; transform: translate(0, -50%);
+  z-index: 801;
+  width: 28px; height: 52px; border-top-left-radius: 10px; border-bottom-left-radius: 10px;
+  display:flex; align-items:center; justify-content:center; cursor: pointer;
+  background: color-mix(in oklab, var(--felt-dark) 74%, black);
+  box-shadow: 0 0 0 1px var(--chrome-border), -6px 0 20px rgba(0,0,0,.35);
 }
-#compactLog header, #compactLog footer {
-  padding: 10px; display:flex; align-items:center; justify-content:space-between;
+
+/* Tighten your table spacing in landscape, fixed small gap */
+@media (orientation: landscape) {
+  .comp-mytable { gap: 4px; }
 }
-#compactLog .body {
-  padding: 10px; overflow: auto; border-top: 1px solid var(--chrome-border);
-  border-bottom: 1px solid var(--chrome-border);
+
+/* Picker docking (still valid in compact on) */
+body[data-compact="true"] #picker {
+  position: fixed; left: 50%; bottom: calc(10px + var(--compact-pad-bottom));
+  transform: translateX(-50%);
+  z-index: 10000;
+  border-radius: 12px;
 }
+#toast { z-index: 10001; }
 
 /* Picker: docked bottom-center in compact mode */
 body[data-compact="true"] #picker {

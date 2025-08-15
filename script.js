@@ -60,6 +60,10 @@ function loadSettings(){
   saveSettings();
 }
 
+settings.compactMode  ??= false;
+settings.railOpen     ??= false;
+settings.railExpanded ??= false;
+
 function saveSettings(){
   try{
     localStorage.setItem('tens_settings', JSON.stringify(settings));
@@ -72,8 +76,10 @@ function saveSettings(){
 }
 
 function applyCompactToggles(){
-  document.body.dataset.compact = settings.compactMode ? 'true' : '';
-  document.body.dataset.railCollapsed = settings.railCollapsed ? 'true' : '';
+  document.body.dataset.compact = settings.compactMode ? 'true' : 'false';
+  document.body.dataset.railCollapsed = settings.railCollapsed ? 'true' : 'false'; // kept for compatibility (not used visually)
+  document.body.dataset.railOpen = settings.railOpen ? 'true' : 'false';
+  document.body.dataset.railExpanded = settings.railExpanded ? 'true' : 'false';
 }
 
 // derive felt-dark + chrome vars from a base color
@@ -104,6 +110,40 @@ function applyCardBackToBody(){
     document.body.dataset.cardback = settings.cardBack || 'solid-blue';
     document.body.style.removeProperty('--cardback-custom-bg');
   }
+}
+
+function applyCardFaceTheme(){
+  document.body.dataset.cardface = (settings.cardFaceTheme === 'dark') ? 'dark' : 'classic';
+}
+function applyCardBack(){
+  const v = settings.cardBack || 'classic';
+  const root = document.documentElement;
+  const body = document.body;
+
+  if (typeof v === 'string' && v.startsWith('solid:')){
+    const hex = v.slice(6);
+    body.dataset.cardback = 'custom';
+    root.style.setProperty('--cardback-custom-bg', `linear-gradient(180deg, ${hex}, ${hex})`);
+    return;
+  }
+  if (typeof v === 'string' && v.startsWith('mix:')){
+    const [a,b] = v.slice(4).split(',');
+    body.dataset.cardback = 'custom';
+    root.style.setProperty('--cardback-custom-bg', `conic-gradient(from 0deg at 50% 50%, ${a}, ${b}, ${a})`);
+    return;
+  }
+  body.dataset.cardback = v;
+  root.style.removeProperty('--cardback-custom-bg');
+}
+
+function wireHandGridForCompact(){
+  if (document.body.dataset.compact !== 'true') return;
+  const meWrap = document.getElementById('human');
+  if (!meWrap) return;
+  const stacks = meWrap.querySelectorAll('.stack');
+  if (!stacks.length) return;
+  const handStack = stacks[stacks.length - 1];
+  handStack.classList.add('compact-hand-grid');
 }
 
 // ===== State =====
@@ -1427,34 +1467,33 @@ async function aiTakeTurn(p, chain){
     return endOrNext();
   }
 
+  // decide if a 10 should be used now (Easy/Medium)
+  // STRICT: never on an empty pile; only when no non-10 legal exists, or very tight spots.
+  function shouldUseTenNow(){
+    // Hard stop: NEVER on an empty pile
+    if (state.pile.length === 0) return false;
 
-// decide if a 10 should be used now (Easy/Medium)
-// STRICT: never on an empty pile; only when no non-10 legal exists, or very tight spots.
-function shouldUseTenNow(){
-  // Hard stop: NEVER on an empty pile
-  if (state.pile.length === 0) return false;
+    const you = p;
+    const opponents = state.players.filter(x => x.id !== you.id);
+    const oppAboutToGoOut = opponents.some(o => (
+      o.hand.filter(Boolean).length + faceUpCards(o).length + faceDownCount(o)
+    ) <= 2);
 
-  const you = p;
-  const opponents = state.players.filter(x => x.id !== you.id);
-  const oppAboutToGoOut = opponents.some(o => (
-    o.hand.filter(Boolean).length + faceUpCards(o).length + faceDownCount(o)
-  ) <= 2);
+    // If any non-10 legal exists, do NOT use 10
+    const fu = faceUpCards(p);
+    const ranks = new Set();
+    p.hand.forEach(c=>{ if(c && c.r) ranks.add(c.r); });
+    fu.forEach(c=> ranks.add(c.r));
+    const anyNon10Legal = [...ranks].some(r => r !== '10' && canPlayRank(r));
+    if (anyNon10Legal) return false;
 
-  // If any non-10 legal exists, do NOT use 10
-  const fu = faceUpCards(p);
-  const ranks = new Set();
-  p.hand.forEach(c=>{ if(c && c.r) ranks.add(c.r); });
-  fu.forEach(c=> ranks.add(c.r));
-  const anyNon10Legal = [...ranks].some(r => r !== '10' && canPlayRank(r));
-  if (anyNon10Legal) return false;
+    // At this point 10 is literally the only legal thing:
+    const pileLen = state.pile.length;
+    if (pileLen >= 12) return true;
+    if (oppAboutToGoOut) return true;
 
-  // At this point 10 is literally the only legal thing:
-  const pileLen = state.pile.length;
-  if (pileLen >= 12) return true;
-  if (oppAboutToGoOut) return true;
-
-  return true; // only when 10 is the *only* legal move
-}
+    return true; // only when 10 is the *only* legal move
+  }
 
   try{
     if(!state.roundActive) { endOrNext(); return; }
@@ -1515,7 +1554,7 @@ function shouldUseTenNow(){
             ranksVisible.forEach(r => remaining[r] = totalOf(r));
             remaining[activeRank] = Math.max(0, remaining[activeRank] - need);
 
-            const leftoverRanks = Object.keys(remaining).filter(r => remaining[r] > 0);
+            const leftoverRanks = Object.keys(remaining).filter(r => r > 0 && remaining[r] > 0);
             // If after clearing we'd have only one rank left, we can dump it on the fresh pile
             if (leftoverRanks.length === 1) {
               // Prefer using face-up copies of the active rank first
@@ -1662,91 +1701,92 @@ function shouldUseTenNow(){
       return endOrNext();
     }
 
-// ===== “hard/expert” early-pressure branches (tighter) =====
-// --- NEW: Aggressively pick up a single low pile (e.g., lone 2/A) on Expert/Hard ---
-// If the pile is exactly one low card, prefer to overplay with face-up > blind flip > hand.
-// We avoid burning a 10 here; clears are handled elsewhere.
-if ((diff === 'hard' || diff === 'expert') && state.currentValue !== null && pileSingleLowCard()) {
-  const cv = state.currentValue;
-
-  // 1) Try a face-up overplay (exclude 10; we don't want to waste it here)
-  const overFU = [...new Set(faceUpCards(p).map(c => c.r))]
-    .filter(r => r !== '10' && RVAL[r] > cv);
-  if (overFU.length) {
-    return playCards(p, overFU[0], 'faceUp', 1);
-  }
-
-  // 2) Try a blind flip (preferred over a guaranteed hand overplay/pickup)
-  const flipIdx = p.slots.findIndex(s => s && !s.up && s.down);
-  if (flipIdx >= 0) {
-    return tryFlipFaceDownSlot(flipIdx);
-  }
-
-  // 3) Fall back to a hand overplay (still avoid 10 here)
-  const overH = [...new Set(p.hand.map(c => c && c.r))]
-    .filter(r => r && r !== '10' && RVAL[r] > cv);
-  if (overH.length) {
-    return playCards(p, overH[0], 'hand', 1);
-  }
-  // If the only higher option was a 10, let later logic decide on a 10-clear.
-}
-if((diff==='hard'||diff==='expert') && state.currentValue!==null){
-  // If we can make ANY legal non-overplay move (including A/2), do NOT intentionally overplay.
-  const legalExists = hasAnyLegalNonOverplayMove(p);
-  if (!legalExists){
-    if (tryUseTenToAvoidPickup(p)) return;
-    const counts=pileCounts(); const distinct=Object.keys(counts).length;
-    const onlyAces = distinct===1 && counts['A']>0;
-    const single3  = distinct===1 && counts['3']===1;
-    const few2s    = distinct===1 && counts['2']>=1 && counts['2']<=3;
-
-    if(onlyAces){
-      // prefer face-up overplay, else BLIND FLIP, only then hand
-      const higherFU = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r]>1);
-      if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
-
-      const idx1 = p.slots.findIndex(s => s && !s.up && s.down);
-      if(idx1>=0) return tryFlipFaceDownSlot(idx1);
-
-      const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r]>1);
-      if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
-    }
-
-    if(single3 || few2s){
+    // ===== “hard/expert” early-pressure branches (tighter) =====
+    // --- NEW: Aggressively pick up a single low pile (e.g., lone 2/A) on Expert/Hard ---
+    // If the pile is exactly one low card, prefer to overplay with face-up > blind flip > hand.
+    // We avoid burning a 10 here; clears are handled elsewhere.
+    if ((diff === 'hard' || diff === 'expert') && state.currentValue !== null && pileSingleLowCard()) {
       const cv = state.currentValue;
-      const higherFU2 = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r] > cv);
-      if(higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
 
-      const j = p.slots.findIndex(s => s && !s.up && s.down);
-      if(j>=0) return tryFlipFaceDownSlot(j);
+      // 1) Try a face-up overplay (exclude 10; we don't want to waste it here)
+      const overFU = [...new Set(faceUpCards(p).map(c => c.r))]
+        .filter(r => r !== '10' && RVAL[r] > cv);
+      if (overFU.length) {
+        return playCards(p, overFU[0], 'faceUp', 1);
+      }
 
-      const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > cv);
-      if(higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
+      // 2) Try a blind flip (preferred over a guaranteed hand overplay/pickup)
+      const flipIdx = p.slots.findIndex(s => s && !s.up && s.down);
+      if (flipIdx >= 0) {
+        return tryFlipFaceDownSlot(flipIdx);
+      }
+
+      // 3) Fall back to a hand overplay (still avoid 10 here)
+      const overH = [...new Set(p.hand.map(c => c && c.r))]
+        .filter(r => r && r !== '10' && RVAL[r] > cv);
+      if (overH.length) {
+        return playCards(p, overH[0], 'hand', 1);
+      }
+      // If the only higher option was a 10, let later logic decide on a 10-clear.
     }
+    if((diff==='hard'||diff==='expert') && state.currentValue!==null){
+      // If we can make ANY legal non-overplay move (including A/2), do NOT intentionally overplay.
+      const legalExists = hasAnyLegalNonOverplayMove(p);
+      if (!legalExists){
+        if (tryUseTenToAvoidPickup(p)) return;
+        const counts=pileCounts(); const distinct=Object.keys(counts).length;
+        const onlyAces = distinct===1 && counts['A']>0;
+        const single3  = distinct===1 && counts['3']===1;
+        const few2s    = distinct===1 && counts['2']>=1 && counts['2']<=3;
 
-    if(diff==='expert'){
-      const cv = state.currentValue;
-      const pilePts = pilePointsAdjustedForGuaranteedClear(p);
-      const unload  = maxUnloadGroupPoints(p);
-      const distinct3=Object.keys(counts).length;
-      if(distinct3<3 && unload > pilePts){
-        const higherFU3 = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r] > cv);
-        if(higherFU3.length) return playCards(p, higherFU3[0], 'faceUp', 1);
+        if(onlyAces){
+          // prefer face-up overplay, else BLIND FLIP, only then hand
+          const higherFU = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r]>1);
+          if(higherFU.length) return playCards(p, higherFU[0], 'faceUp', 1);
 
-        const k = p.slots.findIndex(s => s && !s.up && s.down);
-        if(k>=0) return tryFlipFaceDownSlot(k);
+          const idx1 = p.slots.findIndex(s => s && !s.up && s.down);
+          if(idx1>=0) return tryFlipFaceDownSlot(idx1);
 
-        const higherH3 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > cv);
-        if(higherH3.length) return playCards(p, higherH3[0], 'hand', 1);
+          const higherH = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r]>1);
+          if(higherH.length) return playCards(p, higherH[0], 'hand', 1);
+        }
+
+        if(single3 || few2s){
+          const cv = state.currentValue;
+          const higherFU2 = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r] > cv);
+          if(higherFU2.length) return playCards(p, higherFU2[0], 'faceUp', 1);
+
+          const j = p.slots.findIndex(s => s && !s.up && s.down);
+          if(j>=0) return tryFlipFaceDownSlot(j);
+
+          const higherH2 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > cv);
+          if(higherH2.length) return playCards(p, higherH2[0], 'hand', 1);
+        }
+
+        if(diff==='expert'){
+          const cv = state.currentValue;
+          const pilePts = pilePointsAdjustedForGuaranteedClear(p);
+          const unload  = maxUnloadGroupPoints(p);
+          const distinct3=Object.keys(counts).length;
+          if(distinct3<3 && unload > pilePts){
+            const higherFU3 = [...new Set(faceUpCards(p).map(c=>c.r))].filter(r => RVAL[r] > cv);
+            if(higherFU3.length) return playCards(p, higherFU3[0], 'faceUp', 1);
+
+            const k = p.slots.findIndex(s => s && !s.up && s.down);
+            if(k>=0) return tryFlipFaceDownSlot(k);
+
+            const higherH3 = [...new Set(p.hand.map(c=>c&&c.r))].filter(r => r && RVAL[r] > cv);
+            if(higherH3.length) return playCards(p, higherH3[0], 'hand', 1);
+          }
+        }
       }
     }
-  }
-}
-
 
     // ===== General play logic (unchanged for hard/expert) =====
     const fuNow = faceUpCards(p);
-    const ranksAvail=new Set(); p.hand.forEach(c=>{ if(c&&c.r) ranksAvail.add(c.r); }); fuNow.forEach(c=>ranksAvail.add(c.r));
+    const ranksAvail = new Set();
+    p.hand.forEach(c=>{ if(c&&c.r) ranksAvail.add(c.r); });
+    fuNow.forEach(c=>ranksAvail.add(c.r));
     let legal=[...ranksAvail].filter(r=>canPlayRank(r)); const nonAce=legal.filter(r=>r!=='A'); if(nonAce.length) legal=nonAce;
 
     // --- NEW: if we can unload a big chunk (≥16 pts) using hand+face-up together, do it ---
@@ -1801,9 +1841,11 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
       if(cntH) return playCards(p,r,'hand',cntH);
     }}
 
+    // === 10s: consider clear rules (HARD/EXPERT may use 10 based on pile/opponents/unload) ===
     const hasTenHand = p.hand.some(c => c && c.r === '10');
-    const hasTenFU   = fuNow.some(c => c.r === '10');
+    const hasTenFU   = fuNow.some(c => c && c.r === '10');
     if (hasTenHand || hasTenFU){
+
       const emptyPile = state.pile.length === 0;
       let use10 = false;
 
@@ -1837,10 +1879,6 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
 
     // ===== Unified highest-legal non-special pick (combined hand + face-up) =====
     {
-      const ranksAvail = new Set();
-      p.hand.forEach(c=>{ if(c && c.r) ranksAvail.add(c.r); });
-      fu.forEach(c=> ranksAvail.add(c.r));
-
       // Filter to legal & non-special
       const legalCombined = [...ranksAvail].filter(r => r !== 'A' && r !== '2' && r !== '10' && canPlayRank(r));
 
@@ -1888,11 +1926,9 @@ if((diff==='hard'||diff==='expert') && state.currentValue!==null){
 
     // ===== MUST-PLAY GUARANTEE (never skip a legal move) =====
     {
-      const fuNow = faceUpCards(p);
+      // Reuse fuNow and ranksAvail defined earlier in this turn
       const can = (r)=> canPlayRank(r);
-      const ranks = [...new Set(
-        p.hand.map(c=>c&&c.r).concat(fuNow.map(c=>c.r))
-      )].filter(Boolean);
+      const ranks = [...ranksAvail];
 
       // helper: play exactly ONE of rank, prefer from face-up to free a slot
       const playOne = (rank)=>{
@@ -2577,25 +2613,46 @@ function renderMiniPile(){ const mini=document.getElementById('miniPile'); const
 }
 
 function renderCompact(){
+  // only do work when compact mode is on
   if (!settings.compactMode) return;
 
-  // Opponents column
+  // make sure compact DOM exists (safe if already present)
+  if (!document.getElementById('compactUI')) {
+    if (typeof ensureCompactDOM === 'function') {
+      ensureCompactDOM();
+    }
+  }
+
+  // If we *still* don't have the compact nodes, bail quietly.
   const oppWrap = document.getElementById('compOpp');
+  const pileLabel = document.getElementById('compPileLabel');
+  const myTable = document.getElementById('compMyTable');
+  const grid = document.getElementById('compPileGrid');
+  const rowsWrap = document.getElementById('compHandRows');
+  const rail = document.getElementById('compRail');
+  const railToggle = document.getElementById('compRailToggle');
+
+  if (!oppWrap || !pileLabel || !myTable || !grid || !rowsWrap || !rail || !railToggle) {
+    return; // compact shell not present; do nothing
+  }
+
+  // ===== Opponents column
   oppWrap.innerHTML = '';
   state.players.forEach((pl, idx)=>{
-    if (pl.isHuman) return; // opponents only
+    if (pl.isHuman) return;
     const chip = document.createElement('div');
     chip.className = 'opp-chip' + (idx === state.turn ? ' turn' : '');
     const head = document.createElement('div'); head.className = 'opp-head';
     const nm = document.createElement('div'); nm.className = 'opp-name'; nm.textContent = pl.name;
+
     const badges = document.createElement('div'); badges.className = 'opp-badges';
     const handCount = pl.hand.filter(Boolean).length;
     const b1 = document.createElement('div'); b1.className='badge-sm'; b1.textContent='H:'+handCount;
-    const b2 = document.createElement('div'); b2.className='badge-sm'; b2.textContent='T:'+ (faceUpCards(pl).length + faceDownCount(pl));
-    badges.append(b1,b2);
+    badges.append(b1);
+
     head.append(nm,badges);
 
-    const table = document.createElement('div'); table.className='opp-table';
+    const table = document.createElement('div'); table.className = 'opp-table';
     faceUpCards(pl).slice(0,4).forEach(c=>{
       const el = makeCardEl(c, true, false);
       el.classList.add('small');
@@ -2607,11 +2664,19 @@ function renderCompact(){
       const ov = document.createElement('div');
       ov.style.position='fixed'; ov.style.inset='0'; ov.style.background='rgba(0,0,0,.55)';
       ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center';
+      const handCnt = pl.hand.filter(Boolean).length;
+      const fuCnt = faceUpCards(pl).length;
+      const fdCnt = faceDownCount(pl);
       ov.innerHTML = `
         <div style="background:var(--chrome-bg); padding:12px; border-radius:12px; max-width:92vw;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
             <b>${pl.name}</b>
             <button class="themed-btn-ghost" id="peekClose">Close</button>
+          </div>
+          <div style="display:flex; gap:12px; margin-bottom:8px;">
+            <div class="badge-sm">Hand: ${handCnt}</div>
+            <div class="badge-sm">Face-up: ${fuCnt}</div>
+            <div class="badge-sm">Face-down: ${fdCnt}</div>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             ${faceUpCards(pl).map(c=> {
@@ -2627,12 +2692,10 @@ function renderCompact(){
     oppWrap.append(chip);
   });
 
-  // Pile + my table strip
-  const pileLabel = document.getElementById('compPileLabel');
+  // ===== Pile + my table strip
   pileLabel.textContent = state.currentValue ? `Active: ${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start';
 
   const my = state.players[0];
-  const myTable = document.getElementById('compMyTable');
   myTable.classList.toggle('turn', state.turn === (my?.id ?? -1));
   myTable.innerHTML = '';
   (my?.slots || []).slice(0,4).forEach(s=>{
@@ -2648,8 +2711,7 @@ function renderCompact(){
     myTable.append(slot);
   });
 
-  // Pile grid (micro-cards)
-  const grid = document.getElementById('compPileGrid');
+  // ===== Pile grid (micro-cards)
   const n = state.pile.filter(Boolean).length;
   const rows = n <= 12 ? 1 : (n <= 24 ? 2 : 3);
   const cols = Math.min(12, Math.max(1, Math.ceil(n / rows)));
@@ -2663,26 +2725,23 @@ function renderCompact(){
     hero.classList.add('comp-hero');
     grid.append(hero);
   }
-
   state.pile.filter(Boolean).forEach(c=>{
     const el = makeCardEl(c, true, false);
     el.classList.add('comp-micro');
     grid.append(el);
   });
 
-  // Hand rows (fit with overlap/shrink if needed)
-  const rowsWrap = document.getElementById('compHandRows');
+  // ===== Hand rows (fit with overlap/shrink if needed)
   rowsWrap.innerHTML = '';
   const hand = (my?.hand || []).filter(Boolean);
 
   function layoutHand(cards){
     const W = (window.innerWidth || 360);
-    const railW = parseInt(getComputedStyle(document.getElementById('compRail')).width) || 56;
-    const oppW  = parseInt(getComputedStyle(document.getElementById('compOpp')).width)  || 80;
+    const railW = parseInt(getComputedStyle(rail).width) || 56;
+    const oppW  = parseInt(getComputedStyle(document.getElementById('compOpp')).width) || 80;
     const usableW = Math.max(240, W - railW - oppW - 24);
 
     let cardW = 48, cardH = 72, rows = 2, overlap = false;
-
     function perRow(){ return Math.max(1, Math.floor((usableW - 12) / (cardW + 4))); }
 
     if (cards.length > perRow() * 2){
@@ -2692,9 +2751,7 @@ function renderCompact(){
         while (cards.length > perRow() * 4 && cardW > 34){
           cardW -= 2; cardH -= 3;
         }
-        if (cards.length > perRow() * 4){
-          rows = 4;
-        }
+        if (cards.length > perRow() * 4){ rows = 4; }
       }
     }
 
@@ -2822,6 +2879,47 @@ function initMiniObserver(){
 }
 
 applyCompactClass();
+
+/* ===== Compact helpers (restored) ===== */
+function isMobileScreen(){
+  try { return window.innerWidth <= 900; } catch(_e){ return false; }
+}
+
+function applyCompactClass(){
+  try{
+    const on = (window.settings && settings.compactMobileView) && isMobileScreen();
+    document.body.classList.toggle('compact-mobile', !!on);
+  }catch(_e){
+    document.body.classList.remove('compact-mobile');
+  }
+}
+
+function applyCompactToggles(){
+  try{
+    // used by the new compact UI + rail collapse
+    document.body.dataset.compact = (window.settings && settings.compactMobileView) ? 'true' : 'false';
+    document.body.dataset.railCollapsed = (window.settings && settings.railCollapsed) ? 'true' : 'false';
+  }catch(_e){
+    delete document.body.dataset.compact;
+    delete document.body.dataset.railCollapsed;
+  }
+}
+
+function wireHandGridForCompact(){
+  // called after render to tighten your hand grid in compact mode
+  if (!document.body.classList.contains('compact-mobile')) return;
+
+  const meWrap = document.getElementById('human');
+  if (!meWrap) return;
+
+  const stacks = meWrap.querySelectorAll('.stack');
+  if (!stacks || !stacks.length) return;
+
+  // the last .stack in #human is your hand
+  const handStack = stacks[stacks.length - 1];
+  handStack.classList.add('compact-hand-grid');
+}
+
 window.addEventListener('resize', applyCompactClass);
 
 function incPickup(p){
@@ -3402,7 +3500,20 @@ function saveSettingsFromUI(){
 
 // Init
 loadSettings();
-try{ const savedDiff=localStorage.getItem('tens_ai_diff'); if(savedDiff){ const el=document.getElementById('aiDifficulty'); if(el) el.value=savedDiff; } }catch(e){}
+
+// Apply visual themes (faces/backs) and compact flags immediately
+applyCardFaceTheme?.();    // safe-call if already defined
+applyCardBack?.();         // safe-call if already defined
+applyCompactToggles?.();   // sets body data-* attrs for compact & rail
+
+try{
+  const savedDiff = localStorage.getItem('tens_ai_diff');
+  if (savedDiff){
+    const el = document.getElementById('aiDifficulty');
+    if (el) el.value = savedDiff;
+  }
+}catch(e){}
+
 resetAll();
 initMiniObserver();
 
@@ -3410,10 +3521,12 @@ initMiniObserver();
 (function ensureCompactDOM(){
   if (document.getElementById('compactUI')) return;
 
+  // Root container
   const root = document.createElement('div');
   root.id = 'compactUI';
   root.innerHTML = `
     <div class="comp-opp"   id="compOpp"></div>
+
     <div class="comp-pile"  id="compPile">
       <div class="pile-head">
         <div class="pile-label" id="compPileLabel">Active: –</div>
@@ -3421,52 +3534,94 @@ initMiniObserver();
           <button class="rail-btn" id="compLogBtn" title="Log">📝</button>
         </div>
       </div>
-      <div class="comp-mytable" id="compMyTable"></div>
+
+      <!-- >>> ORDER FIX: Pile grid FIRST, then your table strip (so pile is above table) -->
       <div class="pile-grid" id="compPileGrid"></div>
+      <div class="comp-mytable" id="compMyTable"></div>
+
       <div class="pile-footer"></div>
     </div>
+
     <div class="comp-rail"  id="compRail">
-      <div class="rail-wrap">
-        <div class="rail-toggle" id="compRailToggle">❯</div>
-        <div class="rail-btn" id="railHint"    title="Hint">💡</div>
-        <div class="rail-btn" id="railSettings" title="Settings">⚙️</div>
-        <div class="rail-btn" id="railMore"    title="Menu">☰</div>
+      <!-- Show/Hide tab that sits on the right edge -->
+      <div class="rail-show" id="railShowBtn">❯</div>
+
+      <!-- Overlay rail panel -->
+      <div class="rail-wrap" id="railWrap">
+        <div class="rail-btn" id="railExpand">
+          <div class="icon">⤢</div><div class="label">Expand/Collapse</div>
+        </div>
+        <div class="rail-btn" id="railHint">
+          <div class="icon">💡</div><div class="label">Hint</div>
+        </div>
+        <div class="rail-btn" id="railSettings">
+          <div class="icon">⚙️</div><div class="label">Settings</div>
+        </div>
+        <div class="rail-btn" id="railPlayers">
+          <div class="icon">👤</div><div class="label">Players</div>
+        </div>
+        <div class="rail-btn" id="railAIDiff">
+          <div class="icon">🎚️</div><div class="label">AI Difficulty</div>
+        </div>
+        <div class="rail-btn" id="railStart">
+          <div class="icon">🔄</div><div class="label">Start New Game</div>
+        </div>
+        <div class="rail-btn" id="railForfeit">
+          <div class="icon">🏳️</div><div class="label">Forfeit Game</div>
+        </div>
+        <div class="rail-btn" id="railRules">
+          <div class="icon">📜</div><div class="label">Rules</div>
+        </div>
       </div>
     </div>
+
     <div class="comp-hand"  id="compHand">
       <div class="comp-hand-rows" id="compHandRows"></div>
     </div>
   `;
   document.body.appendChild(root);
 
-  // Log overlay
-  const overlay = document.createElement('div');
-  overlay.id = 'compactLog';
-  overlay.innerHTML = `
-    <div class="panel">
-      <header><b>Game Log</b><button id="compLogClose" class="themed-btn-ghost">Close</button></header>
-      <div class="body"><div id="log" class="log"></div></div>
-      <footer><span style="opacity:.8">Tap close to return</span></footer>
-    </div>
-  `;
-  document.body.appendChild(overlay);
+  // Wire: Log button uses unified slide-up panel
+  document.getElementById('compLogBtn').onclick = ()=> openLogPanel();
 
-  // Wire overlay open/close
-  document.getElementById('compLogBtn').onclick   = ()=> overlay.style.display = 'flex';
-  document.getElementById('compLogClose').onclick = ()=> overlay.style.display = 'none';
-  overlay.addEventListener('click', (e)=>{
-    if (e.target === overlay) overlay.style.display = 'none';
-  });
-
-  // Rail buttons reuse your existing actions
-  document.getElementById('railHint').onclick     = ()=> document.getElementById('hintBtn')?.click();
-  document.getElementById('railSettings').onclick = ()=> openSettings();
-  document.getElementById('railMore').onclick     = ()=> toast('Open the “More” menu in your existing UI.');
-  document.getElementById('compRailToggle').onclick = ()=>{
-    settings.railCollapsed = !settings.railCollapsed;
+  // Right-rail show/hide (overlay slide)
+  const showBtn = document.getElementById('railShowBtn');
+  showBtn.onclick = ()=>{
+    settings.railOpen = !settings.railOpen;
     saveSettings();
     applyCompactToggles();
   };
+
+  // Right-rail expand labels toggle
+  document.getElementById('railExpand').onclick = ()=>{
+    settings.railExpanded = !settings.railExpanded;
+    saveSettings();
+    applyCompactToggles();
+  };
+
+  // Icons → real actions
+  document.getElementById('railHint').onclick     = ()=> openHint();
+  document.getElementById('railSettings').onclick = ()=> openSettings();
+
+  // Players opens/selects the existing #playerCount control
+  document.getElementById('railPlayers').onclick  = ()=>{
+    // If settings modal exposes the select, just focus it; otherwise, scroll to the control
+    const sel = document.getElementById('playerCount');
+    if (sel){ sel.focus(); sel.scrollIntoView({behavior:'smooth', block:'center'}); toast('Use “Players” select above.'); }
+  };
+
+  document.getElementById('railAIDiff').onclick = ()=>{
+    const sel = document.getElementById('aiDifficulty');
+    if (sel){ sel.focus(); sel.scrollIntoView({behavior:'smooth', block:'center'}); toast('Use “AI Difficulty” select above.'); }
+  };
+
+  document.getElementById('railStart').onclick   = ()=> document.getElementById('newRound')?.click();
+  document.getElementById('railForfeit').onclick = ()=> document.getElementById('newGame')?.click();
+  document.getElementById('railRules').onclick   = ()=> document.getElementById('rulesBtn')?.click();
+
+  // Keep the close button on slide-up log
+  const logX = document.getElementById('logPanelClose');
+  if (logX) logX.addEventListener('click', closeLogPanel);
 })();
 
 applyCompactToggles();
@@ -3488,9 +3643,19 @@ document.querySelector('#rulesModal .backdrop').addEventListener('click', () => 
   document.getElementById('rulesModal').style.display = 'none';
 });
 
-// --- PWA: register service worker ---
+// --- PWA: register service worker (safe for localhost/https only) ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    const okProtocol =
+      location.protocol === 'https:' ||
+      location.hostname === 'localhost' ||
+      location.hostname === '127.0.0.1';
+
+    if (!okProtocol) {
+      console.info('Skipping SW registration (insecure origin)');
+      return;
+    }
+
     navigator.serviceWorker.register('sw.js').then(registration => {
       // Check for an updated service worker on each load
       registration.update();
@@ -3502,38 +3667,12 @@ if ('serviceWorker' in navigator) {
         newSW.onstatechange = () => {
           if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
             // Optional: reload to get the fresh files immediately
-            window.location.reload();
+            // window.location.reload();
           }
         };
       };
     }).catch(err => console.warn('SW registration failed:', err));
   });
-}
-
-// ===== Compact Mobile Layout =====
-function isMobileScreen(){
-  return window.innerWidth <= 900; // same threshold you already use for mobile checks
-}
-
-function applyCompactClass(){
-  const on = settings.compactMobileView && isMobileScreen();
-  document.body.classList.toggle('compact-mobile', on);
-}
-
-function wireHandGridForCompact(){
-  // Re-run after each render so the hand container gets the grid class.
-  if (!document.body.classList.contains('compact-mobile')) return;
-
-  const meWrap = document.getElementById('human');
-  if (!meWrap) return;
-
-  // Find the hand stack that render() builds (Your Hand section -> following .stack)
-  // We'll select the LAST .stack in #human (your hand), not the table's slotRow.
-  const stacks = meWrap.querySelectorAll('.stack');
-  if (!stacks || !stacks.length) return;
-
-  const handStack = stacks[stacks.length - 1];
-  handStack.classList.add('compact-hand-grid');
 }
 
 // Slide-up Log Panel
@@ -3570,37 +3709,144 @@ function closeLogPanel(){
   document.querySelector('#hintModal .backdrop').addEventListener('click',function(){ document.getElementById('hintModal').style.display='none'; });
   document.getElementById('hintClose').addEventListener('click',function(){ document.getElementById('hintModal').style.display='none'; });
 
-  // ===== Compact View & Log Panel Toggles =====
+  // ===== Compact UI & Log Panel (overlay rail, no legacy inline buttons) =====
 (function(){
-  const compactBtn = document.getElementById('compactToggle');
-  const logBtn     = document.getElementById('logToggle');
-  const logX       = document.getElementById('logPanelClose');
+  // We keep log panel close wiring (still used)
+  const logX = document.getElementById('logPanelClose');
+  if (logX) logX.addEventListener('click', closeLogPanel);
 
-  function paintCompactBtn(){
-    if (!compactBtn) return;
-    compactBtn.textContent = 'Compact View: ' + (settings.compactMobileView ? 'On' : 'Off');
+  // State flags live in settings; ensure defaults
+  settings.compactMode   ??= false;
+  settings.railOpen      ??= false;  // slide in/out
+  settings.railExpanded  ??= false;  // labels on/off
+
+  applyCompactToggles();
+})();
+
+/* ======== FAIL-SAFE UI WIRING (put at END of script.js) ======== */
+(function failSafeBootstrap(){
+  const $ = (id)=> document.getElementById(id);
+
+  function toast(msg){
+    try{
+      console.warn(msg);
+      const el = $('toast');
+      if(!el) return;
+      el.textContent = String(msg);
+      el.classList.add('show');
+      setTimeout(()=> el.classList.remove('show'), 2000);
+    }catch(_e){}
   }
 
-  if (compactBtn){
-    compactBtn.addEventListener('click', ()=>{
-      settings.compactMobileView = !settings.compactMobileView;
-      saveSettings();
-      applyCompactClass();
-      render(); // so the hand grid gets re-wired
-      paintCompactBtn();
-    });
-    paintCompactBtn();
+  // Call the first existing function name from a list; else run a fallback
+  function callFirstExisting(names, fallback){
+    for(const n of names){
+      if (typeof window[n] === 'function'){
+        try { return window[n](); }
+        catch(err){ console.error(`${n} threw:`, err); toast(`${n} error; see console`); return; }
+      }
+    }
+    if (typeof fallback === 'function') return fallback();
+    toast(`Missing handler: ${names.join(' / ')}`);
   }
 
-  if (logBtn){
-    logBtn.addEventListener('click', ()=>{
-      const panel = document.getElementById('logPanel');
-      const open = panel.getAttribute('aria-hidden') === 'false';
-      if (open) closeLogPanel();
-      else openLogPanel();
-    });
+  // Minimal modal helpers (used only if your real openers aren’t present)
+  function openModalById(id){
+    const m = $(id);
+    if(!m) return toast(`Modal not found: #${id}`);
+    m.style.display = 'flex';
+    // close on backdrop or any [id$="Close"] button inside
+    const backdrop = m.querySelector('.backdrop');
+    const closeBtn = m.querySelector('button[id$="Close"]');
+    const close = ()=> (m.style.display = 'none');
+    backdrop && backdrop.addEventListener('click', close, { once:true });
+    closeBtn && closeBtn.addEventListener('click', close, { once:true });
   }
-  if (logX){
-    logX.addEventListener('click', closeLogPanel);
+
+  function safeStartNewGame(){
+    // Prefer your real round/game starters if present:
+    callFirstExisting(
+      ['startNewGame', 'startNewRound', 'newRound', 'startRound', 'newGameRound'],
+      ()=> {
+        // Fallback: if you have a hidden “Start New Game” in round modal, click it
+        const btn = $('roundStartNew') || $('newRound');
+        if (btn) btn.dispatchEvent(new Event('click', { bubbles:true }));
+        else toast('No start function found');
+      }
+    );
+  }
+
+  function safeForfeit(){
+    callFirstExisting(
+      ['forfeitGame','endGame','forfeit','quitMatch'],
+      ()=> toast('No forfeit function found')
+    );
+  }
+
+  function safeOpenSettings(){
+    callFirstExisting(
+      ['openSettings','showSettings','toggleSettings','openSettingsModal'],
+      ()=> openModalById('settingsModal')
+    );
+  }
+
+  function safeOpenRules(){
+    callFirstExisting(
+      ['openRules','showRules','toggleRules','openRulesModal'],
+      ()=> openModalById('rulesModal')
+    );
+  }
+
+  function safeOpenHint(){
+    callFirstExisting(
+      ['showHint','openHint','hint'],
+      ()=> openModalById('hintModal')
+    );
+  }
+
+  function wire(id, handler){
+    const el = $(id);
+    if (!el) return; // don’t explode if missing; we’re fail-safe
+    el.addEventListener('click', handler);
+  }
+
+  function onReady(){
+    try{
+      // Core buttons
+      wire('newRound',   safeStartNewGame);
+      wire('newGame',    safeForfeit);
+      wire('settingsBtn',safeOpenSettings);
+      wire('rulesBtn',   safeOpenRules);
+      wire('hintBtn',    safeOpenHint);
+
+      // If legacy compact/log buttons still exist, neutralize them so they don’t throw
+      const compact = $('compactToggle');
+      if (compact) compact.addEventListener('click', ()=> toast('Compact is now in Settings → Appearance'));
+
+      const logToggle = $('logToggle');
+      if (logToggle) logToggle.addEventListener('click', ()=>{
+        // If you kept the slide-up log panel, try to toggle it; else just hint
+        const panel = document.getElementById('logPanel');
+        if (panel){
+          const v = panel.getAttribute('aria-hidden') !== 'false';
+          panel.setAttribute('aria-hidden', v ? 'false' : 'true');
+        }else{
+          toast('Use the new Log panel toggle (if enabled).');
+        }
+      });
+
+      // Defensive: if something above threw before, at least tell the user we’re alive
+      console.debug('[Tens] Fail-safe wiring complete');
+    }catch(err){
+      console.error('Fail-safe wiring crashed:', err);
+      toast('Init error; see console');
+    }
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', onReady, { once:true });
+  } else {
+    // Script loaded late; wire immediately
+    onReady();
   }
 })();
