@@ -647,3 +647,188 @@ body.compact-mobile .controls {
 #compactToggle, #logToggle {
   margin-left: 6px;
 }
+
+/* ===== Compact Mobile View (beta) ===== */
+:root {
+  --compact-pad: max(8px, env(safe-area-inset-left));
+  --compact-pad-right: max(8px, env(safe-area-inset-right));
+  --compact-pad-top: max(8px, env(safe-area-inset-top));
+  --compact-pad-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+body[data-compact="true"] {
+  overflow: hidden; /* zero-scroll app feel */
+}
+
+/* Hide legacy layout when compact on */
+body[data-compact="true"] #aiTop,
+body[data-compact="true"] #human,
+body[data-compact="true"] #centerPile,
+body[data-compact="true"] #miniPile,
+body[data-compact="true"] #miniAnchor,
+body[data-compact="true"] #scores,
+body[data-compact="true"] .controls {
+  display: none !important;
+}
+
+/* Compact root */
+#compactUI {
+  position: fixed;
+  inset: 0;
+  padding: var(--compact-pad-top) var(--compact-pad-right) var(--compact-pad-bottom) var(--compact-pad);
+  display: none;
+  background: var(--felt); /* reuse table felt */
+}
+
+/* Visible when on */
+body[data-compact="true"] #compactUI { display: grid; }
+
+/* Portrait grid: Left opponents column, center pile+your table, right rail, hand bottom */
+@media (orientation: portrait) {
+  #compactUI {
+    grid-template-areas:
+      "opp  pile  rail"
+      "opp  hand  rail";
+    grid-template-columns: minmax(68px, 84px) 1fr 52px;
+    grid-template-rows: 1fr auto;
+    gap: 8px;
+  }
+}
+
+/* Landscape grid: Opponents left, pile center, rail right, hand bottom spans center */
+@media (orientation: landscape) {
+  #compactUI {
+    grid-template-areas:
+      "opp  pile  rail"
+      "opp  hand  rail";
+    grid-template-columns: minmax(92px, 120px) 1fr 64px;
+    grid-template-rows: 1fr auto;
+    gap: 10px;
+  }
+}
+
+.comp-opp   { grid-area: opp;   display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+.comp-pile  { grid-area: pile;  display: grid; grid-template-rows: auto 1fr auto; gap: 6px; border-radius: 12px; padding: 8px; background: color-mix(in oklab, var(--felt) 86%, black); box-shadow: inset 0 0 0 1px var(--chrome-border); }
+.comp-hand  { grid-area: hand;  display: grid; grid-auto-rows: min-content; gap: 6px; }
+.comp-rail  { grid-area: rail;  display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+.comp-rail .rail-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--felt-dark) 70%, black);
+  box-shadow: inset 0 0 0 1px var(--chrome-border);
+  display: flex; flex-direction: column; align-items: center; padding: 8px 4px;
+}
+
+.comp-rail .rail-btn {
+  width: 36px; height: 36px; border-radius: 12px; display: inline-flex;
+  align-items: center; justify-content: center; cursor: pointer;
+  background: rgba(255,255,255,.06);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  user-select: none;
+}
+
+.comp-rail .rail-toggle {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px;
+  border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.08); cursor: pointer; font-weight: 700;
+}
+
+/* Collapsed rail */
+body[data-rail-collapsed="true"] .comp-rail .rail-wrap { width: 28px; }
+body[data-rail-collapsed="true"] .comp-rail .rail-btn { display: none; }
+body[data-rail-collapsed="true"] .comp-rail .rail-toggle { transform: rotate(180deg); }
+
+/* Pile header/label */
+.comp-pile .pile-head { display:flex; align-items:center; justify-content:space-between; }
+.comp-pile .pile-label { font-weight: 700; opacity: .95; }
+.comp-pile .pile-grid  { display: grid; gap: 4px; align-content: start; }
+.comp-pile .pile-footer{ display:flex; justify-content:flex-end; gap:8px; }
+
+/* Pile micro-cards */
+.comp-micro {
+  width: 28px; height: 42px; font-size: 14px;
+  display:flex; align-items:center; justify-content:center;
+}
+@media (orientation: landscape) {
+  .comp-micro { width: 32px; height: 48px; font-size: 16px; }
+}
+
+/* Active value “hero” card */
+.comp-hero {
+  width: 40px; height: 60px; font-size: 20px;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* Your table strip (4 up over 4 down, down fully covered by up) */
+.comp-mytable {
+  display: grid; grid-template-columns: repeat(4, minmax(44px, 1fr)); gap: 6px;
+  padding: 6px; border-radius: 10px;
+  background: color-mix(in oklab, var(--felt-dark) 80%, black);
+  box-shadow: inset 0 0 0 1px var(--chrome-border);
+}
+.comp-mytable .slot { position: relative; height: 64px; }
+.comp-mytable .slot .card { position: absolute; inset: 0; }
+
+/* Hand rows: exactly 2 rows preferred; can expand to 3/4 with overlap & shrink */
+.comp-hand-rows { display: grid; gap: 4px; }
+.comp-hand-row  { display: flex; justify-content: center; gap: 4px; }
+
+/* Allow optional overlap if needed */
+.comp-overlap .comp-hand-row { gap: 0; }
+.comp-overlap .comp-hand-row .card { margin-left: -22px; }
+.comp-overlap .comp-hand-row .card:first-child { margin-left: 0; }
+
+/* Opponents column: tiny rows with name, counts, tiny table preview */
+.opp-chip {
+  border-radius: 10px; padding: 6px; background: rgba(0,0,0,.12);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
+}
+.opp-head { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.opp-name { font-size: 12px; font-weight: 700; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+.opp-badges { display:flex; gap:6px; }
+.badge-sm {
+  font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
+}
+.opp-table { display:flex; gap: 2px; margin-top: 4px; }
+.opp-table .card.small { width: 20px; height: 30px; font-size: 11px; }
+
+/* Turn glow ring */
+.opp-chip.turn, .comp-mytable.turn {
+  outline: 2px solid rgba(255,255,255,.55);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.18);
+}
+
+/* Log overlay (summon on demand) */
+#compactLog {
+  position: fixed; inset: 0; background: rgba(0,0,0,.66);
+  display: none; align-items: center; justify-content: center;
+  padding: 12px;
+}
+#compactLog .panel {
+  width: min(720px, 92vw); height: min(70vh, 520px);
+  background: color-mix(in oklab, var(--felt) 88%, black);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
+  display: grid; grid-template-rows: auto 1fr auto;
+}
+#compactLog header, #compactLog footer {
+  padding: 10px; display:flex; align-items:center; justify-content:space-between;
+}
+#compactLog .body {
+  padding: 10px; overflow: auto; border-top: 1px solid var(--chrome-border);
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+/* Picker: docked bottom-center in compact mode */
+body[data-compact="true"] #picker {
+  position: fixed; left: 50%; bottom: calc(10px + var(--compact-pad-bottom));
+  transform: translateX(-50%);
+  z-index: 10000;
+  border-radius: 12px;
+}
+
+/* Toast: ensure visible above compact UI */
+#toast { z-index: 10001; }

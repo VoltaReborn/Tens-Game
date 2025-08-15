@@ -12,8 +12,6 @@ const AI_NAMES=[...MALE_NAMES,...FEMALE_NAMES];
 
 // ===== Settings (with persistence) =====
 const settings = {
-  compactMobileView: false,   // new
-  compactLogCollapsed: true,  // new (keep inline log hidden in compact mode)
   pauseBefore:false, warnOn:false, warnThresh:5,
   showSuits:false, miniTap:false, miniCorner:'tr', miniHidden:false,
   showHintBtn:true,
@@ -24,8 +22,14 @@ const settings = {
   tableFavorites:[],
   cardBack:'solid-blue',
   cardBackFavorites:[],            
-  cardBackCustomBg:''  
-         
+  cardBackCustomBg:'',
+
+  // ===== Compact Mobile View (new) =====
+  compactMode: false,          // toggle in Settings
+  railCollapsed: false,        // right-rail collapse state
+
+  // Extra felt presets
+  tablePresetExtra: ['#d44f9b','#caa11c','#7a4fbf','#d76b29']
 };
 
 function loadSettings(){
@@ -65,6 +69,11 @@ function saveSettings(){
   applyCardBackToBody();
   document.body.dataset.cardback = settings.cardBack || 'solid-blue';
   document.body.dataset.cardface = settings.cardFaceTheme;
+}
+
+function applyCompactToggles(){
+  document.body.dataset.compact = settings.compactMode ? 'true' : '';
+  document.body.dataset.railCollapsed = settings.railCollapsed ? 'true' : '';
 }
 
 // derive felt-dark + chrome vars from a base color
@@ -393,7 +402,8 @@ function render(){
 
   updateScores();
   renderMiniPile();
-  wireHandGridForCompact();
+  
+  if (settings.compactMode) renderCompact();
 }
 
 // ==== Theme helpers (felt gradient from a single base color) ====
@@ -2565,6 +2575,151 @@ function openHint(){
 function placeMiniByCorner(corner){ const mini=document.getElementById('miniPile'); const anchor=document.getElementById('miniAnchor'); const pos={tl:[10,10], tr:[window.innerWidth-10-mini.offsetWidth,10], bl:[10,window.innerHeight-10-mini.offsetHeight], br:[window.innerWidth-10-mini.offsetWidth, window.innerHeight-10-mini.offsetHeight]}; const target=pos[corner]||pos.tr; const x=target[0]; const y=target[1]; mini.style.left=x+'px'; mini.style.top=y+'px'; mini.style.right='auto'; mini.style.bottom='auto'; const ax = corner.indexOf('l')>=0? 10 : (window.innerWidth-54); const ay = corner.indexOf('t')>=0? 10 : (window.innerHeight-54); anchor.style.left=ax+'px'; anchor.style.top=ay+'px'; }
 function renderMiniPile(){ const mini=document.getElementById('miniPile'); const mInfo=document.getElementById('miniInfo'); const mMore=document.getElementById('miniMore'); const mStack=document.getElementById('miniStack'); mStack.innerHTML=''; state.pile.filter(Boolean).forEach(function(c){ mStack.append(makeCardEl(c,true,false)); }); mInfo.textContent= state.currentValue? (RANKS[state.currentValue-1]+' × '+state.currentCount) : 'Fresh start'; const overflow = mStack.scrollHeight > mini.clientHeight; mMore.textContent = overflow ? 'Scroll to see all' : ''; mini.scrollTop = mini.scrollHeight; placeMiniByCorner(settings.miniCorner||'tr'); const anchor=document.getElementById('miniAnchor'); if(settings.miniHidden){ mini.style.display='none'; anchor.style.display='flex'; }else{ anchor.style.display='none'; }
 }
+
+function renderCompact(){
+  if (!settings.compactMode) return;
+
+  // Opponents column
+  const oppWrap = document.getElementById('compOpp');
+  oppWrap.innerHTML = '';
+  state.players.forEach((pl, idx)=>{
+    if (pl.isHuman) return; // opponents only
+    const chip = document.createElement('div');
+    chip.className = 'opp-chip' + (idx === state.turn ? ' turn' : '');
+    const head = document.createElement('div'); head.className = 'opp-head';
+    const nm = document.createElement('div'); nm.className = 'opp-name'; nm.textContent = pl.name;
+    const badges = document.createElement('div'); badges.className = 'opp-badges';
+    const handCount = pl.hand.filter(Boolean).length;
+    const b1 = document.createElement('div'); b1.className='badge-sm'; b1.textContent='H:'+handCount;
+    const b2 = document.createElement('div'); b2.className='badge-sm'; b2.textContent='T:'+ (faceUpCards(pl).length + faceDownCount(pl));
+    badges.append(b1,b2);
+    head.append(nm,badges);
+
+    const table = document.createElement('div'); table.className='opp-table';
+    faceUpCards(pl).slice(0,4).forEach(c=>{
+      const el = makeCardEl(c, true, false);
+      el.classList.add('small');
+      table.append(el);
+    });
+
+    chip.append(head, table);
+    chip.onclick = ()=>{
+      const ov = document.createElement('div');
+      ov.style.position='fixed'; ov.style.inset='0'; ov.style.background='rgba(0,0,0,.55)';
+      ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center';
+      ov.innerHTML = `
+        <div style="background:var(--chrome-bg); padding:12px; border-radius:12px; max-width:92vw;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
+            <b>${pl.name}</b>
+            <button class="themed-btn-ghost" id="peekClose">Close</button>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            ${faceUpCards(pl).map(c=> {
+              const t = document.createElement('div'); t.appendChild(makeCardEl(c,true,false)); return t.outerHTML;
+            }).join('')}
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#peekClose').onclick = ()=> ov.remove();
+      ov.addEventListener('click',(e)=>{ if(e.target===ov) ov.remove(); });
+    };
+
+    oppWrap.append(chip);
+  });
+
+  // Pile + my table strip
+  const pileLabel = document.getElementById('compPileLabel');
+  pileLabel.textContent = state.currentValue ? `Active: ${RANKS[state.currentValue-1]} × ${state.currentCount}` : 'Fresh start';
+
+  const my = state.players[0];
+  const myTable = document.getElementById('compMyTable');
+  myTable.classList.toggle('turn', state.turn === (my?.id ?? -1));
+  myTable.innerHTML = '';
+  (my?.slots || []).slice(0,4).forEach(s=>{
+    const slot = document.createElement('div'); slot.className='slot';
+    if (s && s.down){
+      const down = makeCardEl({r:'',s:'♠'}, true, true);
+      slot.append(down);
+    }
+    if (s && s.up){
+      const up = makeCardEl(s.up, true, false);
+      slot.append(up);
+    }
+    myTable.append(slot);
+  });
+
+  // Pile grid (micro-cards)
+  const grid = document.getElementById('compPileGrid');
+  const n = state.pile.filter(Boolean).length;
+  const rows = n <= 12 ? 1 : (n <= 24 ? 2 : 3);
+  const cols = Math.min(12, Math.max(1, Math.ceil(n / rows)));
+  grid.style.gridTemplateColumns = `repeat(${cols}, auto)`;
+  grid.innerHTML = '';
+
+  const showHero = n >= 18 && state.currentValue !== null;
+  if (showHero){
+    const hr = RANKS[state.currentValue-1];
+    const hero = makeCardEl({r:hr,s:'♠'}, true, false);
+    hero.classList.add('comp-hero');
+    grid.append(hero);
+  }
+
+  state.pile.filter(Boolean).forEach(c=>{
+    const el = makeCardEl(c, true, false);
+    el.classList.add('comp-micro');
+    grid.append(el);
+  });
+
+  // Hand rows (fit with overlap/shrink if needed)
+  const rowsWrap = document.getElementById('compHandRows');
+  rowsWrap.innerHTML = '';
+  const hand = (my?.hand || []).filter(Boolean);
+
+  function layoutHand(cards){
+    const W = (window.innerWidth || 360);
+    const railW = parseInt(getComputedStyle(document.getElementById('compRail')).width) || 56;
+    const oppW  = parseInt(getComputedStyle(document.getElementById('compOpp')).width)  || 80;
+    const usableW = Math.max(240, W - railW - oppW - 24);
+
+    let cardW = 48, cardH = 72, rows = 2, overlap = false;
+
+    function perRow(){ return Math.max(1, Math.floor((usableW - 12) / (cardW + 4))); }
+
+    if (cards.length > perRow() * 2){
+      rows = 3;
+      if (cards.length > perRow() * 3){
+        overlap = true;
+        while (cards.length > perRow() * 4 && cardW > 34){
+          cardW -= 2; cardH -= 3;
+        }
+        if (cards.length > perRow() * 4){
+          rows = 4;
+        }
+      }
+    }
+
+    document.getElementById('compHand').classList.toggle('comp-overlap', overlap);
+
+    const per = Math.ceil(cards.length / rows);
+    for (let r=0; r<rows; r++){
+      const row = document.createElement('div'); row.className = 'comp-hand-row';
+      cards.slice(r*per, (r+1)*per).forEach(c=>{
+        const el = makeCardEl(c, false, false);
+        el.style.width = cardW+'px'; el.style.height = cardH+'px';
+        el.classList.add('playable');
+        el.onclick = ()=>{
+          if (state.uiLock) return;
+          const qty = my.hand.filter(x=>x && x.r===c.r).length;
+          promptCountAndPlay(c.r, 'hand', qty);
+        };
+        row.append(el);
+      });
+      rowsWrap.append(row);
+    }
+  }
+  layoutHand(hand);
+}
+
 let miniObserverInitialized = false;
 function initMiniObserver(){
   if (miniObserverInitialized) return;
@@ -2873,6 +3028,28 @@ function openSettings(){
   ap.onchange= ()=>{ settings.autoPlayCopies = ap.checked; saveSettings(); };
   if (ca) ca.onchange = ()=>{ settings.clearAnim = ca.value; saveSettings(); };
 
+  // === Compact mode toggle (adds to Gameplay tab) ===
+  const compactRowId = 'setCompactRow';
+  let cmpRow = document.getElementById(compactRowId);
+  if (!cmpRow){
+    cmpRow = document.createElement('div');
+    cmpRow.id = compactRowId;
+    cmpRow.className = 'row';
+    cmpRow.style.marginTop = '8px';
+    cmpRow.innerHTML = `
+      <label><input type="checkbox" id="setCompactMode"> Compact Mobile View (beta)</label>
+    `;
+    document.getElementById('gameplayTab').appendChild(cmpRow);
+  }
+  const setCompact = document.getElementById('setCompactMode');
+  setCompact.checked = !!settings.compactMode;
+  setCompact.onchange = ()=>{
+    settings.compactMode = setCompact.checked;
+    saveSettings();
+    applyCompactToggles();
+    render();
+  };
+
   // ===== TABLE COLOR =====
   const presetWrap = document.getElementById('tablePresetChips');
   const addBtn     = document.getElementById('tableColorAdd');
@@ -2880,10 +3057,15 @@ function openSettings(){
   const colorPick  = document.getElementById('tableColorPicker');
 
   const PRESETS = [
-    {name:'green', hex:'#0a5a3c'},
-    {name:'blue',  hex:'#153a68'},
-    {name:'red',   hex:'#7e1515'}
-  ];
+  {name:'green',  hex:'#0a5a3c'},
+  {name:'blue',   hex:'#153a68'},
+  {name:'red',    hex:'#7e1515'},
+  // new defaults
+  {name:'pink',   hex:'#d44f9b'},
+  {name:'yellow', hex:'#caa11c'},
+  {name:'purple', hex:'#7a4fbf'},
+  {name:'orange', hex:'#d76b29'}
+];
 
   function applyTable(hex){
     document.documentElement.style.setProperty('--felt', hex);
@@ -3223,6 +3405,71 @@ loadSettings();
 try{ const savedDiff=localStorage.getItem('tens_ai_diff'); if(savedDiff){ const el=document.getElementById('aiDifficulty'); if(el) el.value=savedDiff; } }catch(e){}
 resetAll();
 initMiniObserver();
+
+// === Compact UI bootstrap (inject DOM & wire controls once) ===
+(function ensureCompactDOM(){
+  if (document.getElementById('compactUI')) return;
+
+  const root = document.createElement('div');
+  root.id = 'compactUI';
+  root.innerHTML = `
+    <div class="comp-opp"   id="compOpp"></div>
+    <div class="comp-pile"  id="compPile">
+      <div class="pile-head">
+        <div class="pile-label" id="compPileLabel">Active: –</div>
+        <div style="display:flex; gap:8px;">
+          <button class="rail-btn" id="compLogBtn" title="Log">📝</button>
+        </div>
+      </div>
+      <div class="comp-mytable" id="compMyTable"></div>
+      <div class="pile-grid" id="compPileGrid"></div>
+      <div class="pile-footer"></div>
+    </div>
+    <div class="comp-rail"  id="compRail">
+      <div class="rail-wrap">
+        <div class="rail-toggle" id="compRailToggle">❯</div>
+        <div class="rail-btn" id="railHint"    title="Hint">💡</div>
+        <div class="rail-btn" id="railSettings" title="Settings">⚙️</div>
+        <div class="rail-btn" id="railMore"    title="Menu">☰</div>
+      </div>
+    </div>
+    <div class="comp-hand"  id="compHand">
+      <div class="comp-hand-rows" id="compHandRows"></div>
+    </div>
+  `;
+  document.body.appendChild(root);
+
+  // Log overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'compactLog';
+  overlay.innerHTML = `
+    <div class="panel">
+      <header><b>Game Log</b><button id="compLogClose" class="themed-btn-ghost">Close</button></header>
+      <div class="body"><div id="log" class="log"></div></div>
+      <footer><span style="opacity:.8">Tap close to return</span></footer>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Wire overlay open/close
+  document.getElementById('compLogBtn').onclick   = ()=> overlay.style.display = 'flex';
+  document.getElementById('compLogClose').onclick = ()=> overlay.style.display = 'none';
+  overlay.addEventListener('click', (e)=>{
+    if (e.target === overlay) overlay.style.display = 'none';
+  });
+
+  // Rail buttons reuse your existing actions
+  document.getElementById('railHint').onclick     = ()=> document.getElementById('hintBtn')?.click();
+  document.getElementById('railSettings').onclick = ()=> openSettings();
+  document.getElementById('railMore').onclick     = ()=> toast('Open the “More” menu in your existing UI.');
+  document.getElementById('compRailToggle').onclick = ()=>{
+    settings.railCollapsed = !settings.railCollapsed;
+    saveSettings();
+    applyCompactToggles();
+  };
+})();
+
+applyCompactToggles();
 
 document.body.dataset.cardback=settings.cardBack;
 
